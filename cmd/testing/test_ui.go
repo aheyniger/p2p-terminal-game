@@ -9,6 +9,56 @@ import (
 
 func main() {
 	ui := tui.GetScreen()
+	ui.Screen.SetStyle(tui.DefStyle)
+	ui.Screen.Clear()
+
+	defer ui.Quit()
+
+	s := ui.Screen
+
+	width, height := s.Size()
+
+	x, y := width/2, height/2
+	px, py := x, y
+
+	ui.DrawTile(x, y)
+
+	for {
+		ui.Show()
+
+		ev := ui.Screen.PollEvent()
+		switch e := ev.(type) {
+		case *tcell.EventResize:
+			ui.Screen.Sync()
+			width, height = s.Size()
+		case *tcell.EventKey:
+			switch e.Key() {
+			case tcell.KeyEscape:
+				return
+			case tcell.KeyUp:
+				y--
+			case tcell.KeyDown:
+				y++
+			case tcell.KeyLeft:
+				x--
+			case tcell.KeyRight:
+				x++
+			case tcell.KeyRune:
+				switch e.Rune() {
+				case 'r', 'R':
+					x, y = width/2, height/2
+				}
+			}
+		}
+
+		ui.EraseTile(px, py)
+		ui.DrawTile(x, y)
+		px, py = x, y
+	}
+}
+
+func samplerUi() {
+	ui := tui.GetScreen()
 
 	ui.Screen.SetStyle(tui.DefStyle)
 	ui.Screen.EnableMouse()
