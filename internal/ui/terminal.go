@@ -8,6 +8,7 @@ import (
 
 type Ui struct {
 	Screen            tcell.Screen
+	headerHeight      int
 	headerFields      []string
 	headerFieldValues map[string]string
 }
