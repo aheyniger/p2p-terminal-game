@@ -7,7 +7,9 @@ import (
 )
 
 type Ui struct {
-	Screen tcell.Screen
+	Screen            tcell.Screen
+	headerFields      []string
+	headerFieldValues map[string]string
 }
 
 func NewScreenTest() {
@@ -42,7 +44,9 @@ func GetScreen() Ui {
 		log.Fatal(err)
 	}
 
-	return Ui{Screen: screen}
+	ui := Ui{Screen: screen, headerFields: make([]string, 0), headerFieldValues: make(map[string]string)}
+
+	return ui
 }
 
 func (ui *Ui) Quit() {

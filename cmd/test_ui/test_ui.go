@@ -8,9 +8,11 @@ import (
 )
 
 func main() {
+	// samplerUi()
 	ui := tui.GetScreen()
 	ui.Screen.SetStyle(tui.DefStyle)
-	ui.Screen.Clear()
+	// ui.Screen.Clear()
+	ui.Screen.Fill('', )
 
 	defer ui.Quit()
 
@@ -23,8 +25,13 @@ func main() {
 
 	ui.DrawTile(x, y)
 
+	ui.SetHeaderField("Location", fmt.Sprintf("%v,%v", x, y))
+	ui.SetHeaderField("Dimensions", fmt.Sprintf("%vWx%vH", width, height))
+	ui.SetHeaderField("Last input", "")
+	ui.DrawHeader()
+
+	ui.Show()
 	for {
-		ui.Show()
 
 		ev := ui.Screen.PollEvent()
 		switch e := ev.(type) {
@@ -32,28 +39,42 @@ func main() {
 			ui.Screen.Sync()
 			width, height = s.Size()
 		case *tcell.EventKey:
+			var lastKey string
+
 			switch e.Key() {
 			case tcell.KeyEscape:
 				return
 			case tcell.KeyUp:
+				lastKey = "UpArrow"
 				y--
 			case tcell.KeyDown:
+				lastKey = "DownArrow"
 				y++
 			case tcell.KeyLeft:
+				lastKey = "LeftArrow"
 				x--
 			case tcell.KeyRight:
+				lastKey = "RightArrow"
 				x++
 			case tcell.KeyRune:
+				lastKey = (string)(e.Rune())
 				switch e.Rune() {
 				case 'r', 'R':
 					x, y = width/2, height/2
 				}
 			}
+			ui.SetHeaderField("Last input", lastKey)
 		}
 
 		ui.EraseTile(px, py)
 		ui.DrawTile(x, y)
 		px, py = x, y
+
+		ui.SetHeaderField("Location", fmt.Sprintf("%v,%v", x, y))
+		ui.SetHeaderField("Dimensions", fmt.Sprintf("%vWx%vH", width, height))
+		ui.DrawHeader()
+
+		ui.Show()
 	}
 }
 
