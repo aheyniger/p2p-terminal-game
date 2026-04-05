@@ -21,3 +21,12 @@ There is a `Makefile` to make building and running a bit easier
 - All main packages to define a `func main()` should go in their own folder in `cmd/`
 - All code not in a `main()` should go into some directory in `internal/`
 - Scripts go into `scripts/`
+
+
+### Run main.go
+Open 3 terminals. In src:
+Terminal 1 run: go run main.go 8000
+Terminal 2: go run main.go 8001 127.0.0.1:8000
+Terminal 3: go run main.go 8002 127.0.0.1:8000
+
+Enter messages to be broadcasted to other nodes. Other nodes should display "Received: <msg>".Messages are also saved in shared.log. Currently there are duplicate messages because theyre broadcasted via gossip protocol but duplicates can be removed later. 
