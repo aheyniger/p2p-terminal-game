@@ -6,9 +6,12 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/memberlist"
 )
+
+var seen_msg = make(map[string]bool) //map of seen messages so we can deduplicate
 
 func main() {
 
@@ -82,7 +85,7 @@ func main() {
 		input = strings.TrimSpace(input)
 
 		if input != "" {
-			broadcastLog(queue, input)
+			broadcastLog(queue, config.Name, input)
 		}
 	}
 }
@@ -115,7 +118,27 @@ func (d *Delegate) MergeRemoteState(buf []byte, join bool) {}
 func (d *Delegate) NotifyMsg(msg []byte) {
 	logLine := string(msg)
 
-	fmt.Println("Received log:", logLine)
+	parts := strings.SplitN(logLine, "|", 3)
+	if len(parts) != 3 {
+		log.Println("Malformed message:", logLine)
+		return
+	}
+
+	node := parts[0]
+	id := parts[1]
+	message := parts[2]
+
+	// Deduplicate using ID
+	if seen_msg[id] {
+		return
+	}
+	seen_msg[id] = true
+
+	// Clean display
+	formatted := fmt.Sprintf("[%s] %s", node, message)
+
+
+	fmt.Println(formatted)
 
 	// Append to file
 	f, err := os.OpenFile("shared.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -128,11 +151,16 @@ func (d *Delegate) NotifyMsg(msg []byte) {
 	f.WriteString(logLine + "\n")
 }
 
-func broadcastLog(queue *memberlist.TransmitLimitedQueue, message string) {
-	b := &LogBroadcast{
-		msg: []byte(message),
-	}
-	queue.QueueBroadcast(b)
+func broadcastLog(queue *memberlist.TransmitLimitedQueue, nodeName string, message string) {
+	full := fmt.Sprintf("%s|%d|%s",
+		nodeName,
+		time.Now().UnixNano(),
+		message,
+	) //added a unique ID to each message so we can filter duplicates for the log
+
+	queue.QueueBroadcast(&LogBroadcast{
+		msg: []byte(full),
+	})
 }
 
 func (d *Delegate) GetBroadcasts(overhead, limit int) [][]byte {
