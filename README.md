@@ -24,8 +24,18 @@ There is a `Makefile` to make building and running a bit easier
 
 
 ### Run main.go
-Open 3 terminals. In src:
-Terminal 1 run: go run main.go 8000
+Open 4 nodes as per main2.go lines 51-60. 
+In src:
+Node 1 run: go build -o node main2.go
+./node 4041
+
+node 2: ./node 4041 128.180.120.95:4041
+
+node 3: ./node 4041 128.180.120.95:4041
+
+node 4: ./node 4041 128.180.120.95:4041
+
+old:
 Terminal 2: go run main.go 8001 127.0.0.1:8000
 Terminal 3: go run main.go 8002 127.0.0.1:8000
 
