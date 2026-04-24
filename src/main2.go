@@ -1,4 +1,4 @@
-package main
+package my_net
 import "bufio"
 
 import (
@@ -10,6 +10,8 @@ import (
 
 	"github.com/hashicorp/memberlist"
 )
+
+// var state *game.WorldState
 
 var seen_msg = make(map[string]bool) //map of seen messages so we can deduplicate
 
@@ -115,41 +117,41 @@ func (d *Delegate) NodeMeta(limit int) []byte { return nil }
 func (d *Delegate) LocalState(join bool) []byte { return nil }
 func (d *Delegate) MergeRemoteState(buf []byte, join bool) {}
 
-func (d *Delegate) NotifyMsg(msg []byte) {
-	logLine := string(msg)
+// func (d *Delegate) NotifyMsg(msg []byte) {
+// 	logLine := string(msg)
 
-	parts := strings.SplitN(logLine, "|", 3)
-	if len(parts) != 3 {
-		log.Println("Malformed message:", logLine)
-		return
-	}
+// 	parts := strings.SplitN(logLine, "|", 3)
+// 	if len(parts) != 3 {
+// 		log.Println("Malformed message:", logLine)
+// 		return
+// 	}
 
-	node := parts[0]
-	id := parts[1]
-	message := parts[2]
+// 	node := parts[0]
+// 	id := parts[1]
+// 	message := parts[2]
 
-	// Deduplicate using ID
-	if seen_msg[id] {
-		return
-	}
-	seen_msg[id] = true
+// 	// Deduplicate using ID
+// 	if seen_msg[id] {
+// 		return
+// 	}
+// 	seen_msg[id] = true
 
-	// Clean display
-	formatted := fmt.Sprintf("[%s] %s", node, message)
+// 	// Clean display
+// 	formatted := fmt.Sprintf("[%s] %s", node, message)
 
 
-	fmt.Println(formatted)
+// 	fmt.Println(formatted)
 
-	// Append to file
-	f, err := os.OpenFile("shared.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Println("File error:", err)
-		return
-	}
-	defer f.Close()
+// 	// Append to file
+// 	f, err := os.OpenFile("shared.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+// 	if err != nil {
+// 		log.Println("File error:", err)
+// 		return
+// 	}
+// 	defer f.Close()
 
-	f.WriteString(logLine + "\n")
-}
+// 	f.WriteString(logLine + "\n")
+// }
 
 func broadcastLog(queue *memberlist.TransmitLimitedQueue, nodeName string, message string) {
 	full := fmt.Sprintf("%s|%d|%s",
@@ -167,6 +169,29 @@ func (d *Delegate) GetBroadcasts(overhead, limit int) [][]byte {
 	return d.queue.GetBroadcasts(overhead, limit)
 }
 
+func (d *Delegate) NotifyMsg(msg []byte) {
+	raw := string(msg)
+
+	parts := strings.Split(raw, "|")
+	if len(parts) != 3 {
+		return
+	}
+
+	id := parts[0]
+	x := strconv.Atoi(parts[1])
+	y := strconv.Atoi(parts[2])
+
+	player := state.Players[id]
+	if player == nil {
+		player = &game.Player{Id: id, Color: "red"}
+		state.Players[id] = player
+	}
+
+	player.Pos.X = x
+	player.Pos.Y = y
+}
+
+
 // Helper func to convert string → int
 func mustAtoi(s string) int {
 	var i int
@@ -183,4 +208,14 @@ func printMembers(list *memberlist.Memberlist) {
 			member.Address())
 	}
 	fmt.Println(strings.Repeat("-", 20))
+}
+
+func buildMoveMessage(playerID string, x, y int) string {
+	return fmt.Sprintf("%s|%d|%d", playerID, x, y)
+}
+
+func BroadcastPosition(id string, x, y int) {
+	msg := fmt.Sprintf("%s|%d|%d", id, x, y)
+
+	broadcastLog(globalQueue, config.Name, msg)
 }
