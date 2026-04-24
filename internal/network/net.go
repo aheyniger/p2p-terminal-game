@@ -1,12 +1,7 @@
 package my_net
 
-import "bufio"
-
 import (
 	"fmt"
-	"log"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/memberlist"
@@ -16,12 +11,13 @@ type Network struct {
 	List  *memberlist.Memberlist
 	Queue *memberlist.TransmitLimitedQueue
 
-	seen map[string]bool
-	// OnMsg func([]byte)
+	seen             map[string]bool
+	OnMsg            func([]byte)
 	OnPositionUpdate func(id string, x, y int)
+	LocalName        string
 }
 
-type delegate struct{
+type delegate struct {
 	net *Network
 }
 
@@ -32,8 +28,8 @@ type Message struct {
 	Y    int
 }
 
-func (d *delegate) NodeMeta(limit int) []byte { return nil }
-func (d *delegate) LocalState(join bool) []byte { return nil }
+func (d *delegate) NodeMeta(limit int) []byte              { return nil }
+func (d *delegate) LocalState(join bool) []byte            { return nil }
 func (d *delegate) MergeRemoteState(buf []byte, join bool) {}
 
 func (d *delegate) NotifyMsg(msg []byte) {
@@ -56,7 +52,8 @@ func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
 	config.AdvertisePort = port
 
 	n := &Network{
-		seen: make(map[string]bool),
+		seen:      make(map[string]bool),
+		LocalName: name,
 	}
 
 	queue := &memberlist.TransmitLimitedQueue{
@@ -81,8 +78,19 @@ func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
 	return n, nil
 }
 
-func (n *Network) BroadcastPosition(id string, x, y int) {
-	func (n *Network) BroadcastPosition(playerID string, x, y int) {
+// func broadcastLog(queue *memberlist.TransmitLimitedQueue, nodeName string, message string) {
+// 	full := fmt.Sprintf("%s|%d|%s",
+// 		nodeName,
+// 		time.Now().UnixNano(),
+// 		message,
+// 	) //added a unique ID to each message so we can filter duplicates for the log
+
+// 	queue.QueueBroadcast(&LogBroadcast{
+// 		msg: []byte(full),
+// 	})
+// }
+
+func (n *Network) BroadcastPosition(playerID string, x, y int) {
 	msg := fmt.Sprintf("%s|%d|%s|%d|%d",
 		n.List.LocalNode().Name,
 		time.Now().UnixNano(),
@@ -94,7 +102,6 @@ func (n *Network) BroadcastPosition(id string, x, y int) {
 	n.Queue.QueueBroadcast(&broadcast{
 		msg: []byte(msg),
 	})
-}
 }
 
 func buildMoveMessage(playerID string, x, y int) string {
@@ -118,7 +125,7 @@ type broadcast struct {
 }
 
 func (b *broadcast) Invalidates(other memberlist.Broadcast) bool {
-	return false
+	return true
 }
 
 func (b *broadcast) Message() []byte {
@@ -126,4 +133,3 @@ func (b *broadcast) Message() []byte {
 }
 
 func (b *broadcast) Finished() {}
-

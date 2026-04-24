@@ -1,6 +1,7 @@
 package my_net
 
 import (
+	"fmt"
 	"log"
 	"net"
 )
@@ -15,4 +16,11 @@ func GetOutboundIP() net.IP {
 
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 	return localAddr.IP
+}
+
+// Helper func to convert string → int
+func MustAtoi(s string) int {
+	var i int
+	fmt.Sscanf(s, "%d", &i)
+	return i
 }
