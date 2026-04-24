@@ -9,6 +9,7 @@ import (
 	network "p2p_game/internal/network"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -105,8 +106,11 @@ func main() {
 		return false
 	}
 
+	renderShutdownCh := make(chan bool)
 	go func() {
 		wv.RenderLoop(state, keyInputHandler)
+		renderShutdownCh <- true
+		close(renderShutdownCh)
 	}()
 
 	// seenMsg := make(map[string]bool)
@@ -168,7 +172,18 @@ func main() {
 	// 		gameNet.Broadcast(broadcastMsg)
 	// 	}
 	// }
-	select {} // block forever
+	select {
+	case shutdown := <-renderShutdownCh:
+		if shutdown {
+			if err := gameNet.List.Leave(5 * time.Second); err != nil {
+				fmt.Printf("failed to leave: %w", err)
+			}
+			if err := gameNet.List.Shutdown(); err != nil {
+				fmt.Printf("failed to shutdown: %w", err)
+			}
+		}
+		return
+	} // block forever
 }
 
 func connectToLobby(outgoing bool) *network.Network {

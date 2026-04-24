@@ -2,6 +2,8 @@ package my_net
 
 import (
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/memberlist"
@@ -42,6 +44,32 @@ func (d *delegate) GetBroadcasts(overhead, limit int) [][]byte {
 	return d.net.Queue.GetBroadcasts(overhead, limit)
 }
 
+type EventDelegate struct {
+	mu sync.Mutex
+	// members map[string]*memberlist.Node
+	net *Network
+}
+
+func (e *EventDelegate) NotifyJoin(node *memberlist.Node) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// e.members[node.Name] = node
+	log.Printf("Node joined: %s (%s)", node.Name, node.Addr)
+}
+
+func (e *EventDelegate) NotifyLeave(node *memberlist.Node) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// delete(e.members, node.Name)
+	log.Printf("Node left: %s (%s)", node.Name, node.Addr)
+}
+
+func (e *EventDelegate) NotifyUpdate(node *memberlist.Node) {
+	log.Printf("Node updated: %s", node.Name)
+}
+
 func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
 	config := memberlist.DefaultLANConfig()
 
@@ -68,6 +96,7 @@ func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
 
 	n.Queue = queue
 	config.Delegate = &delegate{net: n}
+	config.Events = &EventDelegate{net: n}
 
 	list, err := memberlist.Create(config)
 	if err != nil {
@@ -108,10 +137,10 @@ func buildMoveMessage(playerID string, x, y int) string {
 	return fmt.Sprintf("%s|%d|%d", playerID, x, y)
 }
 
-func (n *Network) Join(addresses []string) error {
-	_, err := n.List.Join(addresses)
-	return err
-}
+// func (n *Network) Join(addresses []string) error {
+// 	_, err := n.List.Join(addresses)
+// 	return err
+// }
 
 func (n *Network) Broadcast(msg string) {
 	b := &broadcast{
