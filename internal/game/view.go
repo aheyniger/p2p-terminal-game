@@ -73,7 +73,7 @@ func (view *View) DrawWorld(state WorldState) {
 }
 
 func (view *View) DrawPlayer(player Player) {
-	view.Ui.DrawTile(player.Pos.X, player.Pos.Y)
+	view.Ui.DrawTile(player.Pos.X, player.Pos.Y, player.Color)
 }
 
 func (view View) GetViewCenter() (int, int) {

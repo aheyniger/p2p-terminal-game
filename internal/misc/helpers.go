@@ -8,3 +8,7 @@ func MustAtoi(s string) int {
 	fmt.Sscanf(s, "%d", &i)
 	return i
 }
+
+func Atoi32(s string) int32 {
+	return int32(MustAtoi(s))
+}

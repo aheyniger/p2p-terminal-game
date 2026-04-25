@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"os"
 	"p2p_game/internal/game"
 	. "p2p_game/internal/misc"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -35,13 +37,16 @@ func main() {
 
 	cx, cy := wv.GetViewCenter()
 
+	//TODO: should we change the ID type? like to just the uuid.UUID type or an int?
 	localPlayer := &game.Player{
-		Id:    "local",
-		Color: "blue",
+		Id:    uuid.New().String(),
+		Color: rand.Int32(),
 		Pos:   game.Vec2{X: cx, Y: cy},
 	}
-
+	gameNet.NodePlayers["local"] = localPlayer.Id
 	state.Players[localPlayer.Id] = localPlayer
+
+	gameNet.BroadcastJoin(localPlayer.Id, localPlayer.Color)
 
 	// NETWORK HOOK (incoming msgs)
 	gameNet.OnPositionUpdate = func(id string, x, y int) {
@@ -112,47 +117,13 @@ func main() {
 		renderShutdownCh <- true
 		close(renderShutdownCh)
 	}()
+	playerLeaveCh := make(chan string)
+	gameNet.PlayerLeaveCh = playerLeaveCh
 
 	// seenMsg := make(map[string]bool)
 
 	gameNet.OnMsg = func(msg []byte) {
-		line := string(msg)
-
-		parts := strings.Split(line, "|")
-		// if len(parts) != 4 {
-		// 	log.Println("Malformed message:", logLine)
-		// 	return
-		// }
-
-		// node := parts[0]
-		pId := parts[2]
-		x := MustAtoi(parts[3])
-		y := MustAtoi(parts[4])
-		gameNet.OnPositionUpdate(pId, x, y)
-		// id := parts[1]
-		// // timestamp := parts[2]
-		// message := parts[3]
-
-		// // Deduplicate using ID
-		// if seenMsg[id] {
-		// 	return
-		// }
-		// seenMsg[id] = true
-
-		// // Clean display
-		// formatted := fmt.Sprintf("[%s] %s", node, message)
-
-		// fmt.Println(formatted)
-
-		// // Append to file
-		// f, err := os.OpenFile("shared.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		// if err != nil {
-		// 	log.Println("File error:", err)
-		// 	return
-		// }
-		// defer f.Close()
-
-		// f.WriteString(logLine + "\n")
+		OnMsgReceived(gameNet, state, string(msg))
 	}
 
 	// Keep running + print members periodically
@@ -183,7 +154,68 @@ func main() {
 			}
 		}
 		return
+	case playerId := <-playerLeaveCh:
+		fmt.Printf("%s", playerId)
+		// delete(state.Players, playerId)
 	} // block forever
+}
+
+func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg string) {
+	parts := strings.Split(msg, network.Delim)
+	// if len(parts) != 4 {
+	// 	log.Println("Malformed message:", logLine)
+	// 	return
+	// }
+
+	node := parts[0]
+	// timestamp := parts[1]
+	msgType := MustAtoi(parts[2])
+
+	switch network.MsgType(msgType) {
+	case network.JOIN:
+		pId := parts[3]
+		pColor := MustAtoi(parts[4])
+		newPlayer := &game.Player{
+			Id:    pId,
+			Color: int32(pColor),
+			Pos:   game.Vec2{X: -1, Y: -1},
+		}
+
+		gameState.Players[newPlayer.Id] = newPlayer
+		gameNet.NodePlayers[node] = newPlayer.Id
+
+	case network.POS_UPDATE:
+		pId := parts[3]
+		x := MustAtoi(parts[4])
+		y := MustAtoi(parts[5])
+		gameNet.OnPositionUpdate(pId, x, y)
+
+	}
+
+	// id := parts[1]
+	// // timestamp := parts[2]
+	// message := parts[3]
+
+	// // Deduplicate using ID
+	// if seenMsg[id] {
+	// 	return
+	// }
+	// seenMsg[id] = true
+
+	// // Clean display
+	// formatted := fmt.Sprintf("[%s] %s", node, message)
+
+	// fmt.Println(formatted)
+
+	// // Append to file
+	// f, err := os.OpenFile("shared.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// if err != nil {
+	// 	log.Println("File error:", err)
+	// 	return
+	// }
+	// defer f.Close()
+
+	// f.WriteString(logLine + "\n")
 }
 
 func connectToLobby(outgoing bool) *network.Network {

@@ -7,8 +7,11 @@ var ColorWhite = tcell.ColorWhiteSmoke
 var ColorBlack = tcell.ColorBlack
 var ColorGray = tcell.ColorGray
 var ColorBlue = tcell.ColorBlue
+var ColorGray1 = tcell.NewHexColor(0x808080)
+var ColorGray2 = tcell.NewHexColor(0x4a4a4a)
+var ColorGray3 = tcell.NewHexColor(0x3d3d3d)
 
-var DefaultBackgroundColor = ColorDarkSlateGray
+var DefaultBackgroundColor = ColorGray3
 var DefaultForegroundColor = ColorBlue
 var HeaderColor = ColorWhite
 var HeaderFieldColor = ColorBlack

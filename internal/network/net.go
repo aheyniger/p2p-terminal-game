@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/hashicorp/memberlist"
 )
@@ -13,10 +12,12 @@ type Network struct {
 	List  *memberlist.Memberlist
 	Queue *memberlist.TransmitLimitedQueue
 
+	NodePlayers      map[string]string
 	seen             map[string]bool
 	OnMsg            func([]byte)
 	OnPositionUpdate func(id string, x, y int)
 	LocalName        string
+	PlayerLeaveCh    chan string
 }
 
 type delegate struct {
@@ -45,16 +46,14 @@ func (d *delegate) GetBroadcasts(overhead, limit int) [][]byte {
 }
 
 type EventDelegate struct {
-	mu sync.Mutex
-	// members map[string]*memberlist.Node
+	mu  sync.Mutex
 	net *Network
 }
 
 func (e *EventDelegate) NotifyJoin(node *memberlist.Node) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	// e.mu.Lock()
+	// defer e.mu.Unlock()
 
-	// e.members[node.Name] = node
 	log.Printf("Node joined: %s (%s)", node.Name, node.Addr)
 }
 
@@ -62,7 +61,9 @@ func (e *EventDelegate) NotifyLeave(node *memberlist.Node) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// delete(e.members, node.Name)
+	// e.net.PlayerLeaveCh <- e.net.NodePlayers[node.Name]
+	delete(e.net.NodePlayers, node.Name)
+
 	log.Printf("Node left: %s (%s)", node.Name, node.Addr)
 }
 
@@ -80,8 +81,9 @@ func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
 	config.AdvertisePort = port
 
 	n := &Network{
-		seen:      make(map[string]bool),
-		LocalName: name,
+		seen:        make(map[string]bool),
+		LocalName:   name,
+		NodePlayers: make(map[string]string),
 	}
 
 	queue := &memberlist.TransmitLimitedQueue{
@@ -118,20 +120,6 @@ func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
 // 		msg: []byte(full),
 // 	})
 // }
-
-func (n *Network) BroadcastPosition(playerID string, x, y int) {
-	msg := fmt.Sprintf("%s|%d|%s|%d|%d",
-		n.List.LocalNode().Name,
-		time.Now().UnixNano(),
-		playerID,
-		x,
-		y,
-	)
-
-	n.Queue.QueueBroadcast(&broadcast{
-		msg: []byte(msg),
-	})
-}
 
 func buildMoveMessage(playerID string, x, y int) string {
 	return fmt.Sprintf("%s|%d|%d", playerID, x, y)
