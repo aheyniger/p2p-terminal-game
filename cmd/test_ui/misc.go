@@ -22,7 +22,7 @@ func BasicTestUi() {
 	x, y := width/2, height/2
 	px, py := x, y
 
-	ui.DrawTile(x, y)
+	ui.DrawTile(x, y, 0xFF0000)
 
 	ui.SetHeaderField("Location", fmt.Sprintf("%v,%v", x, y))
 	ui.SetHeaderField("Dimensions", fmt.Sprintf("%vWx%vH", width, height))
@@ -66,7 +66,7 @@ func BasicTestUi() {
 		}
 
 		ui.EraseTile(px, py)
-		ui.DrawTile(x, y)
+		ui.DrawTile(x, y, 0xFF0000)
 		px, py = x, y
 
 		ui.SetHeaderField("Location", fmt.Sprintf("%v,%v", x, y))

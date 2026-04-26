@@ -18,7 +18,6 @@ import (
 
 func main() {
 	var mu sync.Mutex
-	// fmt.Println("Hello! This will be the main executable for the game, but right now is unimplemented!")
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage:")

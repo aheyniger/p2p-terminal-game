@@ -3,14 +3,23 @@ package main
 import (
 	"fmt"
 	"p2p_game/internal/game"
-	"p2p_game/internal/network"
+	my_net "p2p_game/internal/network"
 	"sync"
-	"time"
+
+	// "time"
 
 	"github.com/gdamore/tcell/v2"
 )
 
 func main() {
+
+	ip := my_net.GetOutboundIP().String()
+
+	net, err := my_net.CreateNetwork("node1", ip, 7946)
+	if err != nil {
+		panic(err)
+	}
+
 	var mu sync.Mutex
 
 	state := &game.WorldState{
@@ -24,14 +33,14 @@ func main() {
 
 	localPlayer := &game.Player{
 		Id:    "local",
-		Color: "blue",
+		Color: 0x0000FF,
 		Pos:   game.Vec2{X: cx, Y: cy},
 	}
 
 	state.Players[localPlayer.Id] = localPlayer
 
 	// NETWORK HOOK (incoming msgs)
-	network.OnPositionUpdate = func(id string, x, y int) {
+	net.OnPositionUpdate = func(id string, x, y int) {
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -80,7 +89,7 @@ func main() {
 
 		// broadcast AFTER state change
 		p := state.Players[localPlayer.Id]
-		network.BroadcastPosition(p.Id, p.Pos.X, p.Pos.Y)
+		net.BroadcastPosition(p.Id, p.Pos.X, p.Pos.Y)
 
 		wv.Ui.SetHeaderField("Last input", lastKey)
 		wv.Ui.SetHeaderField("Location",
