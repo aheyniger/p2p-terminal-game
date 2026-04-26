@@ -74,6 +74,17 @@ func (ui *Ui) DrawHeader() {
 	}
 }
 
+func (ui *Ui) DrawLogFooter() {
+	s := ui.Screen
+
+	width, _ := s.Size()
+
+	for col := 0; col <= width; col++ {
+		s.Put(col, 0, " ", HeaderStyle)
+	}
+
+}
+
 func (ui *Ui) ClearScreen() {
 
 }

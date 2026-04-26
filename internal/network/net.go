@@ -5,6 +5,8 @@ import (
 	"log"
 	"sync"
 
+	. "p2p_game/internal/misc"
+
 	"github.com/hashicorp/memberlist"
 )
 
@@ -74,7 +76,7 @@ func (e *EventDelegate) NotifyUpdate(node *memberlist.Node) {
 	log.Printf("Node updated: %s", node.Name)
 }
 
-func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
+func CreateNetwork(name string, bindIP string, port int, logCh chan string) (*Network, error) {
 	config := memberlist.DefaultLANConfig()
 
 	config.Name = name
@@ -88,6 +90,11 @@ func CreateNetwork(name string, bindIP string, port int) (*Network, error) {
 		LocalName:   name,
 		NodePlayers: make(map[string]string),
 	}
+
+	writer := NewChanWriter(logCh)
+	logger := log.New(writer, "[memberlist] ", 0)
+
+	config.Logger = logger
 
 	queue := &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {

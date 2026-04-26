@@ -26,14 +26,26 @@ func main() {
 		return
 	}
 	outgoingConn := len(os.Args) > 2
-	gameNet := connectToLobby(outgoingConn)
+	logCh := make(chan string, 256)
+	gameNet := connectToLobby(outgoingConn, logCh)
 
 	state := &game.WorldState{
 		Players: make(map[game.PlayerId]*game.Player),
 	}
 
+	f, err := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println("File error:", err)
+		return
+	}
+	defer f.Close()
+
 	wv := game.NewWorldView()
 	defer wv.CloseWorldView()
+
+	log.SetOutput(f)
+	os.Stdout = f
+	os.Stderr = f
 
 	cx, cy := wv.GetViewCenter()
 
@@ -159,8 +171,11 @@ func main() {
 			// fmt.Printf("%s", playerId)
 			// _ = playerId
 			delete(state.Players, playerId)
-			// fmt.Println(len(state.Players))
-		} // block forever
+		// fmt.Println(len(state.Players))
+		case line := <-logCh:
+			log.Println(line)
+		}
+
 	}
 
 }
@@ -223,7 +238,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 	// f.WriteString(logLine + "\n")
 }
 
-func connectToLobby(outgoing bool) *network.Network {
+func connectToLobby(outgoing bool, logCh chan string) *network.Network {
 	port := MustAtoi(os.Args[1])
 
 	nodeIP := os.Getenv("NODE_IP")
@@ -234,7 +249,7 @@ func connectToLobby(outgoing bool) *network.Network {
 
 	machineName := fmt.Sprintf("%s:%d", nodeIP, port)
 
-	gameNet, err := network.CreateNetwork(machineName, nodeIP, port)
+	gameNet, err := network.CreateNetwork(machineName, nodeIP, port, logCh)
 	if err != nil {
 		log.Fatalf("Error starting game network: %v", err)
 	}
