@@ -59,10 +59,13 @@ func (e *EventDelegate) NotifyJoin(node *memberlist.Node) {
 
 func (e *EventDelegate) NotifyLeave(node *memberlist.Node) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// e.net.PlayerLeaveCh <- e.net.NodePlayers[node.Name]
+	playerId := e.net.NodePlayers[node.Name]
 	delete(e.net.NodePlayers, node.Name)
+	e.mu.Unlock()
+
+	go func() {
+		e.net.PlayerLeaveCh <- playerId
+	}()
 
 	log.Printf("Node left: %s (%s)", node.Name, node.Addr)
 }

@@ -29,6 +29,7 @@ type Block struct {
 }
 
 type WorldState struct {
+	// mu      sync.Mutex
 	Players map[PlayerId]*Player
 	Blocks  map[Vec2]*Block
 	Version uint64 // for lamport timestamps, keeping track of what game state is newest

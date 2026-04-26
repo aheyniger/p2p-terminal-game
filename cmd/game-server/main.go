@@ -143,21 +143,26 @@ func main() {
 	// 		gameNet.Broadcast(broadcastMsg)
 	// 	}
 	// }
-	select {
-	case shutdown := <-renderShutdownCh:
-		if shutdown {
-			if err := gameNet.List.Leave(5 * time.Second); err != nil {
-				fmt.Printf("failed to leave: %w", err)
+	for {
+		select {
+		case shutdown := <-renderShutdownCh:
+			if shutdown {
+				if err := gameNet.List.Leave(5 * time.Second); err != nil {
+					fmt.Printf("failed to leave: %w", err)
+				}
+				if err := gameNet.List.Shutdown(); err != nil {
+					fmt.Printf("failed to shutdown: %w", err)
+				}
 			}
-			if err := gameNet.List.Shutdown(); err != nil {
-				fmt.Printf("failed to shutdown: %w", err)
-			}
-		}
-		return
-	case playerId := <-playerLeaveCh:
-		fmt.Printf("%s", playerId)
-		// delete(state.Players, playerId)
-	} // block forever
+			return
+		case playerId := <-playerLeaveCh:
+			// fmt.Printf("%s", playerId)
+			// _ = playerId
+			delete(state.Players, playerId)
+			// fmt.Println(len(state.Players))
+		} // block forever
+	}
+
 }
 
 func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg string) {
