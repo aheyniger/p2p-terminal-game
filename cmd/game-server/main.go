@@ -174,6 +174,7 @@ func main() {
 		// fmt.Println(len(state.Players))
 		case line := <-logCh:
 			log.Println(line)
+			wv.SetLogLine(line)
 		}
 
 	}

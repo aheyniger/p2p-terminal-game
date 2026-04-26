@@ -74,15 +74,16 @@ func (ui *Ui) DrawHeader() {
 	}
 }
 
-func (ui *Ui) DrawLogFooter() {
+func (ui *Ui) DrawFooter() {
 	s := ui.Screen
 
-	width, _ := s.Size()
+	width, height := s.Size()
 
 	for col := 0; col <= width; col++ {
-		s.Put(col, 0, " ", HeaderStyle)
+		s.Put(col, height-1, " ", HeaderStyle)
 	}
 
+	ui.DrawText(0, height-1, width, height-1, HeaderFieldStyle, ui.LogLine)
 }
 
 func (ui *Ui) ClearScreen() {

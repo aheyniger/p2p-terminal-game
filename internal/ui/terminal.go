@@ -11,6 +11,7 @@ type Ui struct {
 	headerHeight      int
 	headerFields      []string
 	headerFieldValues map[string]string
+	LogLine           string
 }
 
 func NewScreenTest() {

@@ -70,6 +70,7 @@ func (view *View) DrawWorld(state WorldState) {
 	}
 
 	view.Ui.DrawHeader()
+	view.Ui.DrawFooter()
 }
 
 func (view *View) DrawPlayer(player Player) {
@@ -84,4 +85,8 @@ func (view View) GetViewCenter() (int, int) {
 func (view View) GetViewSize() (int, int) {
 	width, height := view.Ui.Screen.Size()
 	return width / 2, height / 2
+}
+
+func (view *View) SetLogLine(line string) {
+	view.Ui.LogLine = line
 }
