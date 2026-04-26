@@ -4,9 +4,13 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-func (ui *Ui) DrawTile(x, y int) {
+func (ui *Ui) DrawTile(x, y int, colorCode int32) {
+	style := DefStyle.Foreground(tcell.NewHexColor(colorCode))
+	if colorCode == 0 {
+		style = NoBgStyle
+	}
 	s := ui.Screen
-	s.SetContent(x, y, '█', nil, NoBgStyle)
+	s.SetContent(x, y, '█', nil, style)
 }
 
 func (ui *Ui) EraseTile(x, y int) {

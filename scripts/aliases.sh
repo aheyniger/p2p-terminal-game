@@ -1,6 +1,7 @@
 #!/bin/bash
 
-alias rungame='make run'
+# alias rungame='make run'
+alias rungame='go run cmd/game-server/main.go'
 alias buildgame='make build'
 
 alias runui='make run CMD=test_ui'

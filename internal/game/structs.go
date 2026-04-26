@@ -18,7 +18,7 @@ const (
 type Player struct {
 	Id        PlayerId
 	Addr      string // host and port (host should probably be IP address but maybe can be either IP address or hostname)
-	Color     string // we should change this type later, but for right now string is fine
+	Color     int32
 	Pos       Vec2   // location of the player
 	HeldBlock *Block // so we can separate blocks in the game world and identify each individually
 }
@@ -29,15 +29,16 @@ type Block struct {
 }
 
 type WorldState struct {
+	// mu      sync.Mutex
 	Players map[PlayerId]*Player
 	Blocks  map[Vec2]*Block
 	Version uint64 // for lamport timestamps, keeping track of what game state is newest
 }
 
-type MsgType string
+// type MsgType string
 
-const (
-	MsgPeerList    MsgType = "PEER_LIST"
-	MsgStateUpdate MsgType = "STATE_UPDATE"
-	// can add more as needed
-)
+// const (
+// 	MsgPeerList    MsgType = "PEER_LIST"
+// 	MsgStateUpdate MsgType = "STATE_UPDATE"
+// 	// can add more as needed
+// )
