@@ -35,6 +35,8 @@ func (view *View) RenderLoop(state *WorldState, keyInputHandler func(e *tcell.Ev
 			events <- ui.Screen.PollEvent()
 		}
 	}()
+
+	view.Ui.SetHeaderField("Blocks", fmt.Sprintf("%d", len(state.Blocks)))
 	// Run UI at 30fps
 	ticker := time.NewTicker(33 * time.Millisecond)
 	for {
@@ -64,8 +66,11 @@ func (view *View) RenderLoop(state *WorldState, keyInputHandler func(e *tcell.Ev
 func (view *View) DrawWorld(state WorldState) {
 	view.Ui.Screen.Fill(' ', tui.DefStyle)
 
-	for id, player := range state.Players {
-		_ = id
+	for _, block := range state.Blocks {
+		view.DrawBlock(*block)
+	}
+
+	for _, player := range state.Players {
 		view.DrawPlayer(*player)
 	}
 
@@ -75,6 +80,17 @@ func (view *View) DrawWorld(state WorldState) {
 
 func (view *View) DrawPlayer(player Player) {
 	view.Ui.DrawTile(player.Pos.X, player.Pos.Y, player.Color)
+}
+
+func (view *View) DrawBlock(block Block) {
+	color := int32(0xFF0000) // default white
+
+	// Optional: change color if held
+	if block.HeldBy != "" {
+		color = int32(0x00FF00) // green if someone is holding it
+	}
+
+	view.Ui.DrawTile(block.Pos.X, block.Pos.Y, color)
 }
 
 func (view View) GetViewCenter() (int, int) {

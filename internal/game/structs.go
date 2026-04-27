@@ -24,9 +24,15 @@ type Player struct {
 }
 
 type Block struct {
-	ID  string // identifying a block, will be helpful for conflict resolution maybe
-	Pos Vec2
+	ID        string // identifying a block, will be helpful for conflict resolution maybe
+	Pos       Vec2
+	HeldBy    PlayerId //"" is free
+	OwnerNode string
 }
+
+/*im thinking we can have all blocks be identical so we don't have to keep track of which block a player
+picked up, we just set bool holdingBlock to true, and false when it's set down
+*/
 
 type WorldState struct {
 	// mu      sync.Mutex

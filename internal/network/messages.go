@@ -11,6 +11,10 @@ type MsgType int
 const (
 	JOIN MsgType = iota
 	POS_UPDATE
+	GRAB_REQ
+	GRAB_RES
+	DROP_REQ
+	DROP_RES
 )
 
 const Delim = "~|"
@@ -61,4 +65,40 @@ func (n *Network) BroadcastJoin(playerID string, playerColor int32) {
 	n.Queue.QueueBroadcast(&broadcast{
 		msg: []byte(msg),
 	})
+}
+
+// broadcast grab requests by non owners
+func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
+	node := n.List.LocalNode().Name
+	timestamp := time.Now().UnixNano()
+	msg := buildMsg(Delim,
+		node,
+		timestamp,
+		GRAB_REQ,
+		blockID,
+		playerID,
+		owner,
+	)
+
+	n.Queue.QueueBroadcast(&broadcast{
+		msg: []byte(msg),
+	})
+}
+
+func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool) {
+	result := 0
+	if success {
+		result = 1
+	}
+
+	msg := fmt.Sprintf("%s|%d|%d|%s|%s|%d",
+		n.LocalName,
+		time.Now().UnixNano(),
+		GRAB_RES,
+		blockID,
+		playerID,
+		result,
+	)
+
+	n.Broadcast(msg)
 }

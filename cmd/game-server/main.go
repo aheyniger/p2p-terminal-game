@@ -30,6 +30,7 @@ func main() {
 
 	state := &game.WorldState{
 		Players: make(map[game.PlayerId]*game.Player),
+		Blocks: make(map[game.Vec2]*game.Block),
 	}
 
 	f, err := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -204,11 +205,86 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		gameState.Players[newPlayer.Id] = newPlayer
 		gameNet.NodePlayers[node] = newPlayer.Id
 
+		//one node spawns 2 blocks in random locations upon another node joining
+		if node != gameNet.LocalName {
+			numBlocks := 2 //2 blocks per player. change if needed
+			for i := 0; i < numBlocks; i++ {
+				blockID := uuid.New().String()
+
+				block := &game.Block{ 
+					ID: blockID,
+					Pos: game.Vec2{ //plae block in random location
+						X: rand.IntN(50),
+						Y: rand.IntN(20),
+					},
+					HeldBy: "", //held by no one
+				}
+
+				gameState.Blocks[block.Pos] = block
+			}
+		}
+
 	case network.POS_UPDATE:
 		pId := parts[3]
 		x := MustAtoi(parts[4])
 		y := MustAtoi(parts[5])
 		gameNet.OnPositionUpdate(pId, x, y)
+
+	case network.GRAB_REQ:
+		blockID := parts[3]
+		playerID := parts[4]
+		owner := parts[5]
+
+		// Only owner processes
+		if owner != gameNet.LocalName {
+			return
+		}
+
+		b := gameState.FindBlockByID(blockID)
+		if b == nil {
+			return
+		}
+
+		success := false
+
+		if b.HeldBy == "" {
+			b.HeldBy = playerID
+			success = true
+		}
+
+		// broadcast result
+		gameNet.BroadcastGrabResult(blockID, playerID, success)
+
+	case network.GRAB_RES:
+		blockID := parts[3]
+		playerID := parts[4]
+		success := MustAtoi(parts[5]) == 1
+
+		if !success {
+			return
+		}
+
+		b := gameState.FindBlockByID(blockID)
+		if b == nil {
+			return
+		}
+
+		b.HeldBy = playerID
+		gameState.Players[playerID].HeldBlock = b
+
+		// case network.GRAB_BLOCK:
+		// 	pId := parts[3]
+		// 	blockID := parts[4]
+		// 	b := findBlockByID(gameState, blockID)
+		// 	if b == nil {
+		// 		return
+		// 	}
+
+		// 	if b.HeldBy == "" {
+		// 		assign
+		// 		b.HeldBy = pId
+		// 		gameState.Players[pId].HeldBlock = b
+		// 	}
 
 	}
 
