@@ -37,7 +37,7 @@ picked up, we just set bool holdingBlock to true, and false when it's set down
 type WorldState struct {
 	// mu      sync.Mutex
 	Players map[PlayerId]*Player
-	Blocks  map[Vec2]*Block
+	Blocks  map[string]*Block
 	Version uint64 // for lamport timestamps, keeping track of what game state is newest
 }
 

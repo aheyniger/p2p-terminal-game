@@ -30,7 +30,7 @@ func main() {
 
 	state := &game.WorldState{
 		Players: make(map[game.PlayerId]*game.Player),
-		Blocks: make(map[game.Vec2]*game.Block),
+		Blocks: make(map[string]*game.Block),
 	}
 
 	f, err := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -206,8 +206,8 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		gameNet.NodePlayers[node] = newPlayer.Id
 
 		//one node spawns 2 blocks in random locations upon another node joining
-		if node != gameNet.LocalName {
-			numBlocks := 2 //2 blocks per player. change if needed
+		if gameNet.LocalName == node {
+			numBlocks := 1 //1 blocks per player. change if needed
 			for i := 0; i < numBlocks; i++ {
 				blockID := uuid.New().String()
 
@@ -220,7 +220,10 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 					HeldBy: "", //held by no one
 				}
 
-				gameState.Blocks[block.Pos] = block
+				gameState.Blocks[block.ID] = block
+
+				//broadcast to other nodes to spawn blocks:
+				gameNet.BroadcastBlockSpawn(block.ID, block.Pos.X, block.Pos.Y)
 			}
 		}
 
@@ -272,19 +275,30 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		b.HeldBy = playerID
 		gameState.Players[playerID].HeldBlock = b
 
-		// case network.GRAB_BLOCK:
-		// 	pId := parts[3]
-		// 	blockID := parts[4]
-		// 	b := findBlockByID(gameState, blockID)
-		// 	if b == nil {
-		// 		return
-		// 	}
+	// case network.GRAB_BLOCK:
+	// 	pId := parts[3]
+	// 	blockID := parts[4]
+	// 	b := findBlockByID(gameState, blockID)
+	// 	if b == nil {
+	// 		return
+	// 	}
 
-		// 	if b.HeldBy == "" {
-		// 		assign
-		// 		b.HeldBy = pId
-		// 		gameState.Players[pId].HeldBlock = b
-		// 	}
+	// 	if b.HeldBy == "" {
+	// 		assign
+	// 		b.HeldBy = pId
+	// 		gameState.Players[pId].HeldBlock = b
+	// 	}
+
+	case network.BLOCK_SPAWN:
+		blockID := parts[3]
+		x := MustAtoi(parts[4])
+		y := MustAtoi(parts[5])
+
+		gameState.Blocks[blockID] = &game.Block{
+			ID: blockID,
+			Pos: game.Vec2{X: x, Y: y},
+			HeldBy: "",
+		}
 
 	}
 

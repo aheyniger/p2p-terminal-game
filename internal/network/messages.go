@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	// "p2p-terminal-game/internal/game"
+
 )
 
 type MsgType int
@@ -15,6 +18,7 @@ const (
 	GRAB_RES
 	DROP_REQ
 	DROP_RES
+	BLOCK_SPAWN
 )
 
 const Delim = "~|"
@@ -101,4 +105,22 @@ func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool) {
 	)
 
 	n.Broadcast(msg)
+}
+
+func (n *Network) BroadcastBlockSpawn(ID string, posX int, posY int) {
+	node := n.List.LocalNode().Name
+	timestamp := time.Now().UnixNano()
+
+	msg := buildMsg(Delim,
+		node,
+		timestamp,
+		BLOCK_SPAWN,
+		ID,
+		posX,
+		posY,
+	)
+
+	n.Queue.QueueBroadcast(&broadcast{
+		msg: []byte(msg),
+	})
 }
