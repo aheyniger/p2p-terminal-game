@@ -30,7 +30,7 @@ func main() {
 
 	state := &game.WorldState{
 		Players: make(map[game.PlayerId]*game.Player),
-		Blocks: make(map[string]*game.Block),
+		Blocks:  make(map[string]*game.Block),
 	}
 
 	f, err := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -59,6 +59,43 @@ func main() {
 	state.Players[localPlayer.Id] = localPlayer
 
 	gameNet.BroadcastJoin(localPlayer.Id, localPlayer.Color)
+
+	//spawn blocks
+	//one node spawns blocks in random locations upon another node joining
+	// log.Printf("DEBUG compare: local='%q' node='%q'\n", gameNet.LocalName, node)
+	// log.Printf("LEN local=%d node=%d\n", len(gameNet.LocalName), len(node))
+	// if gameNet.LocalName == node {
+	// log.Printf("gamenet.localName == node success'\n")
+
+	numBlocks := 1 //1 blocks per player. change if needed
+	for i := 0; i < numBlocks; i++ {
+		blockID := uuid.New().String()
+
+		block := &game.Block{
+			ID: blockID,
+			Pos: game.Vec2{ //plae block in random location
+				X: rand.IntN(50),
+				Y: rand.IntN(20),
+			},
+			HeldBy:    "", //held by no one
+			OwnerNode: gameNet.LocalName,
+		}
+
+		// fmt.Println("SPAWN:", block.ID)
+		// fmt.Println("RECV BLOCK:", blockID)
+		// fmt.Println("TOTAL BLOCKS:", len(gameState.Blocks))
+		log.Printf("SPAWN: %s'\n", block.ID)
+		log.Printf("recv: %s'\n", blockID)
+		// log.Printf("LEN local=%d node=%d\n", len(gameNet.LocalName), len(node))
+
+		state.Blocks[block.ID] = block
+
+		//broadcast to other nodes to spawn blocks:
+		gameNet.BroadcastBlockSpawn(block.ID, block.Pos.X, block.Pos.Y, block.OwnerNode)
+	}
+	// } else {
+	// 	log.Printf("did not enter if statement\n")
+	// }
 
 	// NETWORK HOOK (incoming msgs)
 	gameNet.OnPositionUpdate = func(id string, x, y int) {
@@ -205,26 +242,19 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		gameState.Players[newPlayer.Id] = newPlayer
 		gameNet.NodePlayers[node] = newPlayer.Id
 
-		//one node spawns 2 blocks in random locations upon another node joining
-		if gameNet.LocalName == node {
-			numBlocks := 1 //1 blocks per player. change if needed
-			for i := 0; i < numBlocks; i++ {
-				blockID := uuid.New().String()
-
-				block := &game.Block{ 
-					ID: blockID,
-					Pos: game.Vec2{ //plae block in random location
-						X: rand.IntN(50),
-						Y: rand.IntN(20),
-					},
-					HeldBy: "", //held by no one
-				}
-
-				gameState.Blocks[block.ID] = block
-
-				//broadcast to other nodes to spawn blocks:
-				gameNet.BroadcastBlockSpawn(block.ID, block.Pos.X, block.Pos.Y)
+		if node != gameNet.LocalName {
+			for _, b := range gameState.Blocks {
+				gameNet.BroadcastStateSync(b.ID, b.Pos.X, b.Pos.Y, b.OwnerNode)
 			}
+		}
+
+		for _, b := range gameState.Blocks {
+			gameNet.BroadcastStateSync(
+				b.ID,
+				b.Pos.X,
+				b.Pos.Y,
+				b.OwnerNode,
+			)
 		}
 
 	case network.POS_UPDATE:
@@ -256,7 +286,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		}
 
 		// broadcast result
-		gameNet.BroadcastGrabResult(blockID, playerID, success)
+		gameNet.BroadcastGrabResult(blockID, playerID, success, b.OwnerNode)
 
 	case network.GRAB_RES:
 		blockID := parts[3]
@@ -293,11 +323,31 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		blockID := parts[3]
 		x := MustAtoi(parts[4])
 		y := MustAtoi(parts[5])
+		owner := parts[6]
 
 		gameState.Blocks[blockID] = &game.Block{
-			ID: blockID,
-			Pos: game.Vec2{X: x, Y: y},
-			HeldBy: "",
+			ID:        blockID,
+			Pos:       game.Vec2{X: x, Y: y},
+			HeldBy:    "",
+			OwnerNode: owner,
+		}
+
+	case network.STATE_SYNC:
+		blockID := parts[3]
+		x := MustAtoi(parts[4])
+		y := MustAtoi(parts[5])
+		owner := parts[6]
+
+		// Avoid duplicates
+		if _, exists := gameState.Blocks[blockID]; exists {
+			return
+		}
+
+		gameState.Blocks[blockID] = &game.Block{
+			ID:        blockID,
+			Pos:       game.Vec2{X: x, Y: y},
+			HeldBy:    "",
+			OwnerNode: owner,
 		}
 
 	}

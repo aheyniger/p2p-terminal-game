@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
 	// "p2p-terminal-game/internal/game"
-
 )
 
 type MsgType int
@@ -19,6 +17,7 @@ const (
 	DROP_REQ
 	DROP_RES
 	BLOCK_SPAWN
+	STATE_SYNC
 )
 
 const Delim = "~|"
@@ -89,7 +88,7 @@ func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
 	})
 }
 
-func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool) {
+func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, owner string) {
 	result := 0
 	if success {
 		result = 1
@@ -107,7 +106,7 @@ func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool) {
 	n.Broadcast(msg)
 }
 
-func (n *Network) BroadcastBlockSpawn(ID string, posX int, posY int) {
+func (n *Network) BroadcastBlockSpawn(ID string, posX int, posY int, owner string) {
 	node := n.List.LocalNode().Name
 	timestamp := time.Now().UnixNano()
 
@@ -118,6 +117,26 @@ func (n *Network) BroadcastBlockSpawn(ID string, posX int, posY int) {
 		ID,
 		posX,
 		posY,
+		owner,
+	)
+
+	n.Queue.QueueBroadcast(&broadcast{
+		msg: []byte(msg),
+	})
+}
+
+func (n *Network) BroadcastStateSync(id string, posX int, posY int, owner string) {
+	node := n.List.LocalNode().Name
+	timestamp := time.Now().UnixNano()
+
+	msg := buildMsg(Delim,
+		node,
+		timestamp,
+		STATE_SYNC,
+		id,
+		posX,
+		posY,
+		owner,
 	)
 
 	n.Queue.QueueBroadcast(&broadcast{
