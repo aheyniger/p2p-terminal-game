@@ -71,6 +71,7 @@ func (n *Network) BroadcastJoin(playerID string, playerColor int32) {
 }
 
 // broadcast grab requests by non owners
+//now a direct send, not technically a broadcast
 func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
 	node := n.List.LocalNode().Name
 	timestamp := time.Now().UnixNano()
@@ -83,9 +84,7 @@ func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
 		owner,
 	)
 
-	n.Queue.QueueBroadcast(&broadcast{
-		msg: []byte(msg),
-	})
+	n.SendDirect(owner, msg)
 }
 
 func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, owner string) {

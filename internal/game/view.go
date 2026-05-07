@@ -80,6 +80,9 @@ func (view *View) DrawWorld(state WorldState) {
 
 func (view *View) DrawPlayer(player Player) {
 	view.Ui.DrawTile(player.Pos.X, player.Pos.Y, player.Color)
+	if player.HeldBlock != nil{
+		view.Ui.DrawTile(player.Pos.X+1, player.Pos.Y, player.Color)
+	}
 }
 
 func (view *View) DrawBlock(block Block) {
@@ -87,7 +90,8 @@ func (view *View) DrawBlock(block Block) {
 
 	// Optional: change color if held
 	if block.HeldBy != "" {
-		color = int32(0x00FF00) // green if someone is holding it
+		// color = int32(0x00FF00) // green if someone is holding it
+		return
 	}
 
 	view.Ui.DrawTile(block.Pos.X, block.Pos.Y, color)

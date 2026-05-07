@@ -97,6 +97,17 @@ func (e *EventDelegate) NotifyLeave(node *memberlist.Node) {
 	log.Printf("Node left: %s (%s)", node.Name, node.Addr)
 }
 
+// SendDirect sends a guaranteed, instant TCP message to a single specific node
+func (n *Network) SendDirect(targetNodeName string, msg string) {
+	for _, node := range n.List.Members() {
+		if node.Name == targetNodeName {
+			// Bypasses the gossip queue entirely
+			n.List.SendReliable(node, []byte(msg))
+			return
+		}
+	}
+}
+
 func (e *EventDelegate) NotifyUpdate(node *memberlist.Node) {
 	log.Printf("Node updated: %s", node.Name)
 }

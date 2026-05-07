@@ -78,8 +78,8 @@ func main() {
 	defer wv.CloseWorldView()
 
 	log.SetOutput(f)
-	os.Stdout = f
-	os.Stderr = f
+	// os.Stdout = f
+	// os.Stderr = f
 
 	cx, cy := wv.GetViewCenter()
 
@@ -188,7 +188,24 @@ func main() {
 			case 'r', 'R':
 				w, h := wv.GetViewSize()
 				state.MovePlayer(localPlayer.Id, w/2-localPlayer.Pos.X, h/2-localPlayer.Pos.Y)
+			case ' ':
+			// attempt block grab
+			log.Printf("DEBUG [INPUT]: Spacebar pressed at player pos X:%d Y:%d\n", localPlayer.Pos.X, localPlayer.Pos.Y)
+
+				for _, b := range state.Blocks { //find block at the players position
+					log.Printf("DEBUG [INPUT]: Checking block %s at X:%d Y:%d\n", b.ID, b.Pos.X, b.Pos.Y)
+					if b.Pos.X == localPlayer.Pos.X && b.Pos.Y == localPlayer.Pos.Y {
+						log.Printf("DEBUG [INPUT]: Hitbox matched! Block is held by: '%s'. Requesting from owner: %s\n", b.HeldBy, b.OwnerNode)
+						if b.HeldBy == "" {
+							// don't assign it yet! ask the owner for permission.
+							gameNet.BroadcastGrabRequest(b.ID, localPlayer.Id, b.OwnerNode)
+						}
+						break
+					}
+				}
 			}
+
+		
 		}
 
 		// broadcast AFTER state change
@@ -221,23 +238,6 @@ func main() {
 		OnMsgReceived(gameNet, state, string(msg))
 	}
 
-	// Keep running + print members periodically
-	// reader := bufio.NewReader(os.Stdin)
-
-	// var msgId atomic.Uint64
-
-	// for {
-	// 	fmt.Print("Enter log: ")
-	// 	input, _ := reader.ReadString('\n')
-
-	// 	input = strings.TrimSpace(input)
-
-	// 	if input != "" {
-	// 		timestamp := time.Now().UnixNano()
-	// 		broadcastMsg := fmt.Sprintf("%s|%d|%d|%s", gameNet.LocalName, msgId.Add(1), timestamp, input)
-	// 		gameNet.Broadcast(broadcastMsg)
-	// 	}
-	// }
 	for {
 		select {
 		case shutdown := <-renderShutdownCh:
@@ -250,11 +250,7 @@ func main() {
 				}
 			}
 			return
-		// case playerId := <-playerLeaveCh:
-		// 	// fmt.Printf("%s", playerId)
-		// 	// _ = playerId
-		// 	delete(state.Players, playerId)
-		// fmt.Println(len(state.Players))
+	
 		case line := <-logCh:
 			log.Println(line)
 			wv.SetLogLine(line)
@@ -311,24 +307,6 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		gameState.Players[newPlayer.Id] = newPlayer
 		gameNet.NodePlayers[node] = newPlayer.Id
 
-		// if node != gameNet.LocalName {
-		// 	for _, b := range gameState.Blocks {
-		// 		if b.OwnerNode == gameNet.LocalName{
-		// 			gameNet.BroadcastStateSync(b.ID, b.Pos.X, b.Pos.Y, b.OwnerNode)
-		// 		}
-				
-		// 	}
-		// }
-
-		// for _, b := range gameState.Blocks {
-		// 	gameNet.BroadcastStateSync(
-		// 		b.ID,
-		// 		b.Pos.X,
-		// 		b.Pos.Y,
-		// 		b.OwnerNode,
-		// 	)
-		// }
-
 	case network.POS_UPDATE:
 		pId := parts[3]
 		x := MustAtoi(parts[4])
@@ -340,13 +318,17 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		playerID := parts[4]
 		owner := parts[5]
 
+		log.Printf("DEBUG [GRAB_REQ]: Received req for block %s by player %s. Target Owner: %s, My Name: %s\n", blockID, playerID, owner, gameNet.LocalName)
+
 		// Only owner processes
 		if owner != gameNet.LocalName {
 			return
 		}
 
-		b := gameState.FindBlockByID(blockID)
+		// b, exists := gameState.FindBlockByID(blockID)
+		b:= gameState.FindBlockByID(blockID)
 		if b == nil {
+			log.Printf("DEBUG [GRAB_REQ]: Block %s not found in my state!\n", blockID)
 			return
 		}
 
@@ -355,6 +337,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		if b.HeldBy == "" {
 			b.HeldBy = playerID
 			success = true
+			log.Printf("DEBUG [GRAB_REQ]: Approved grab! Assigning to %s\n", playerID)
 		}
 
 		// broadcast result
@@ -369,27 +352,16 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 			return
 		}
 
-		b := gameState.FindBlockByID(blockID)
-		if b == nil {
+		b, exists := gameState.Blocks[blockID]
+		if !exists {
 			return
 		}
 
 		b.HeldBy = playerID
-		gameState.Players[playerID].HeldBlock = b
-
-	// case network.GRAB_BLOCK:
-	// 	pId := parts[3]
-	// 	blockID := parts[4]
-	// 	b := findBlockByID(gameState, blockID)
-	// 	if b == nil {
-	// 		return
-	// 	}
-
-	// 	if b.HeldBy == "" {
-	// 		assign
-	// 		b.HeldBy = pId
-	// 		gameState.Players[pId].HeldBlock = b
-	// 	}
+		
+		if p, pExists := gameState.Players[playerID]; pExists {
+			p.HeldBlock = b
+		}
 
 	case network.BLOCK_SPAWN:
 		blockID := parts[3]
