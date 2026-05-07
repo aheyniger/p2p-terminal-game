@@ -15,6 +15,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/google/uuid"
+	"sort"
 )
 
 func main() {
@@ -90,6 +91,8 @@ func main() {
 	}
 	gameNet.NodePlayers["local"] = localPlayer.Id
 	state.Players[localPlayer.Id] = localPlayer
+	leaveEventCh := make(chan network.LeaveEvent)
+	gameNet.LeaveEventCh = leaveEventCh
 
 	gameNet.BroadcastJoin(localPlayer.Id, localPlayer.Color)
 
@@ -209,8 +212,8 @@ func main() {
 		renderShutdownCh <- true
 		close(renderShutdownCh)
 	}()
-	playerLeaveCh := make(chan string)
-	gameNet.PlayerLeaveCh = playerLeaveCh
+	// playerLeaveCh := make(chan string)
+	// gameNet.PlayerLeaveCh = playerLeaveCh
 
 	// seenMsg := make(map[string]bool)
 
@@ -247,14 +250,37 @@ func main() {
 				}
 			}
 			return
-		case playerId := <-playerLeaveCh:
-			// fmt.Printf("%s", playerId)
-			// _ = playerId
-			delete(state.Players, playerId)
+		// case playerId := <-playerLeaveCh:
+		// 	// fmt.Printf("%s", playerId)
+		// 	// _ = playerId
+		// 	delete(state.Players, playerId)
 		// fmt.Println(len(state.Players))
 		case line := <-logCh:
 			log.Println(line)
 			wv.SetLogLine(line)
+		
+		case event := <-leaveEventCh:
+			mu.Lock()
+			
+			// 1. remove the player
+			delete(state.Players, event.PlayerID)
+
+			// 2. figure out who takes over the blocks
+			newOwner := getNextOwner(gameNet, event.NodeName)
+
+			// 3. reassign orphaned blocks
+			for _, b := range state.Blocks {
+				if b.OwnerNode == event.NodeName {
+					b.OwnerNode = newOwner
+					
+					// safety check: if the player who left was currently holding the block, drop it
+					if b.HeldBy == event.PlayerID {
+						b.HeldBy = ""
+					}
+				}
+			}
+			
+			mu.Unlock()
 		}
 
 	}
@@ -426,6 +452,26 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 	// defer f.Close()
 
 	// f.WriteString(logLine + "\n")
+}
+
+func getNextOwner(gameNet *network.Network, leavingNode string) string {
+	var activeNodes []string
+	
+	for _, m := range gameNet.List.Members() {
+		// exclude the node that is actively leaving
+		if m.Name != leavingNode {
+			activeNodes = append(activeNodes, m.Name)
+		}
+	}
+
+	// if you are the last node standing, you own everything
+	if len(activeNodes) == 0 {
+		return gameNet.LocalName
+	}
+
+	// alphabetically sort the remaining nodes to ensure deterministic selection
+	sort.Strings(activeNodes)
+	return activeNodes[0] 
 }
 
 func connectToLobby(outgoing bool, logCh chan string) *network.Network {

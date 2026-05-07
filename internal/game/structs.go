@@ -30,6 +30,8 @@ type Block struct {
 	OwnerNode string
 }
 
+
+
 /*im thinking we can have all blocks be identical so we don't have to keep track of which block a player
 picked up, we just set bool holdingBlock to true, and false when it's set down
 */

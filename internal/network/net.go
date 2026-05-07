@@ -10,6 +10,13 @@ import (
 	"github.com/hashicorp/memberlist"
 )
 
+type LeaveEvent struct {
+	NodeName string
+	PlayerID string
+}
+
+
+
 type Network struct {
 	List  *memberlist.Memberlist
 	Queue *memberlist.TransmitLimitedQueue
@@ -19,7 +26,7 @@ type Network struct {
 	OnMsg            func([]byte)
 	OnPositionUpdate func(id string, x, y int)
 	LocalName        string
-	PlayerLeaveCh    chan string
+	LeaveEventCh  chan LeaveEvent 
 
 	//for tcp state sync (slower but more reliable than udp. still use udp for update messages)
 	GetLocalState func() []byte
@@ -81,7 +88,10 @@ func (e *EventDelegate) NotifyLeave(node *memberlist.Node) {
 	e.mu.Unlock()
 
 	go func() {
-		e.net.PlayerLeaveCh <- playerId
+		e.net.LeaveEventCh <- LeaveEvent{
+			NodeName: node.Name,
+			PlayerID: playerId,
+		}
 	}()
 
 	log.Printf("Node left: %s (%s)", node.Name, node.Addr)
