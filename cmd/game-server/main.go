@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"encoding/json"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/google/uuid"
@@ -32,6 +33,38 @@ func main() {
 		Players: make(map[game.PlayerId]*game.Player),
 		Blocks:  make(map[string]*game.Block),
 	}
+
+	// Set up TCP State Sync Callbacks
+    gameNet.GetLocalState = func() []byte {
+        mu.Lock()
+        defer mu.Unlock()
+        
+        // Serialize the current blocks map into JSON
+        b, err := json.Marshal(state.Blocks)
+        if err != nil {
+            log.Println("Error marshaling local state:", err)
+            return []byte{}
+        }
+        return b
+    }
+
+    gameNet.MergeState = func(buf []byte) {
+        mu.Lock()
+        defer mu.Unlock()
+        
+        var remoteBlocks map[string]*game.Block
+        if err := json.Unmarshal(buf, &remoteBlocks); err != nil {
+            log.Println("Error unmarshaling remote state:", err)
+            return
+        }
+
+        // Merge the incoming blocks into the local state safely
+        for id, block := range remoteBlocks {
+            if _, exists := state.Blocks[id]; !exists {
+                state.Blocks[id] = block
+            }
+        }
+    }
 
 	f, err := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -252,14 +285,14 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		gameState.Players[newPlayer.Id] = newPlayer
 		gameNet.NodePlayers[node] = newPlayer.Id
 
-		if node != gameNet.LocalName {
-			for _, b := range gameState.Blocks {
-				if b.OwnerNode == gameNet.LocalName{
-					gameNet.BroadcastStateSync(b.ID, b.Pos.X, b.Pos.Y, b.OwnerNode)
-				}
+		// if node != gameNet.LocalName {
+		// 	for _, b := range gameState.Blocks {
+		// 		if b.OwnerNode == gameNet.LocalName{
+		// 			gameNet.BroadcastStateSync(b.ID, b.Pos.X, b.Pos.Y, b.OwnerNode)
+		// 		}
 				
-			}
-		}
+		// 	}
+		// }
 
 		// for _, b := range gameState.Blocks {
 		// 	gameNet.BroadcastStateSync(

@@ -20,6 +20,10 @@ type Network struct {
 	OnPositionUpdate func(id string, x, y int)
 	LocalName        string
 	PlayerLeaveCh    chan string
+
+	//for tcp state sync (slower but more reliable than udp. still use udp for update messages)
+	GetLocalState func() []byte
+    MergeState    func([]byte)
 }
 
 type delegate struct {
@@ -34,8 +38,19 @@ type Message struct {
 }
 
 func (d *delegate) NodeMeta(limit int) []byte              { return nil }
-func (d *delegate) LocalState(join bool) []byte            { return nil }
-func (d *delegate) MergeRemoteState(buf []byte, join bool) {}
+func (d *delegate) LocalState(join bool) []byte            { 
+	// world state to send over TCP
+    if d.net.GetLocalState != nil {
+        return d.net.GetLocalState()
+    }
+    return []byte{}
+ }
+func (d *delegate) MergeRemoteState(buf []byte, join bool) {
+	//  TCP state from the cluster, to merge
+    if d.net.MergeState != nil {
+        d.net.MergeState(buf)
+    }
+}
 
 func (d *delegate) NotifyMsg(msg []byte) {
 	if d.net.OnMsg != nil {
