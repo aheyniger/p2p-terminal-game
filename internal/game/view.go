@@ -83,7 +83,7 @@ func (view *View) DrawPlayer(player Player) {
 }
 
 func (view *View) DrawBlock(block Block) {
-	color := int32(0xFF0000) // default white
+	color := int32(0xFF0000) // default red
 
 	// Optional: change color if held
 	if block.HeldBy != "" {

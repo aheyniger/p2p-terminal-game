@@ -60,6 +60,16 @@ func main() {
 
 	gameNet.BroadcastJoin(localPlayer.Id, localPlayer.Color)
 
+
+	// Wait for cluster to acknowledge us before broadcasting our new blocks
+	if outgoingConn {
+		// Wait until memberlist actually registers at least 1 other node
+		for len(gameNet.List.Members()) < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
+		// Add a tiny buffer to allow remote nodes to stabilize their UDP pipelines
+		time.Sleep(200 * time.Millisecond)
+	}
 	//spawn blocks
 	//one node spawns blocks in random locations upon another node joining
 	// log.Printf("DEBUG compare: local='%q' node='%q'\n", gameNet.LocalName, node)
@@ -244,18 +254,21 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 
 		if node != gameNet.LocalName {
 			for _, b := range gameState.Blocks {
-				gameNet.BroadcastStateSync(b.ID, b.Pos.X, b.Pos.Y, b.OwnerNode)
+				if b.OwnerNode == gameNet.LocalName{
+					gameNet.BroadcastStateSync(b.ID, b.Pos.X, b.Pos.Y, b.OwnerNode)
+				}
+				
 			}
 		}
 
-		for _, b := range gameState.Blocks {
-			gameNet.BroadcastStateSync(
-				b.ID,
-				b.Pos.X,
-				b.Pos.Y,
-				b.OwnerNode,
-			)
-		}
+		// for _, b := range gameState.Blocks {
+		// 	gameNet.BroadcastStateSync(
+		// 		b.ID,
+		// 		b.Pos.X,
+		// 		b.Pos.Y,
+		// 		b.OwnerNode,
+		// 	)
+		// }
 
 	case network.POS_UPDATE:
 		pId := parts[3]
@@ -324,6 +337,10 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		x := MustAtoi(parts[4])
 		y := MustAtoi(parts[5])
 		owner := parts[6]
+
+		if _, exists:= gameState.Blocks[blockID]; exists{
+			return //so we dont overwrite
+		}
 
 		gameState.Blocks[blockID] = &game.Block{
 			ID:        blockID,

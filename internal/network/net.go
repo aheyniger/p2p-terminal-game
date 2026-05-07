@@ -152,7 +152,7 @@ type broadcast struct {
 }
 
 func (b *broadcast) Invalidates(other memberlist.Broadcast) bool {
-	return true
+	return false
 }
 
 func (b *broadcast) Message() []byte {
