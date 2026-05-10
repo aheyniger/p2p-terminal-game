@@ -86,7 +86,7 @@ func main() {
 	//TODO: should we change the ID type? like to just the uuid.UUID type or an int?
 	localPlayer := &game.Player{
 		Id:    uuid.New().String(),
-		Color: rand.Int32(),
+		Color: game.GetColorFromID(uuid.New().String()),
 		Pos:   game.Vec2{X: cx, Y: cy},
 	}
 	gameNet.NodePlayers["local"] = localPlayer.Id
@@ -304,10 +304,10 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 	switch network.MsgType(msgType) {
 	case network.JOIN:
 		pId := parts[3]
-		pColor := MustAtoi(parts[4])
+		// pColor := MustAtoi(parts[4])
 		newPlayer := &game.Player{
 			Id:    pId,
-			Color: int32(pColor),
+			Color: game.GetColorFromID(pId),
 			Pos:   game.Vec2{X: -1, Y: -1},
 		}
 
@@ -318,6 +318,21 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		pId := parts[3]
 		x := MustAtoi(parts[4])
 		y := MustAtoi(parts[5])
+
+		//if first time seeig player, make them
+		if _, exists := gameState.Players[pId]; !exists {
+			gameState.Players[pId] = &game.Player{
+				Id:  pId,
+				Pos: game.Vec2{X: x, Y: y},
+				// Assign their permanent color instantly without asking the network
+				Color: game.GetColorFromID(pId), 
+			}
+		} else {
+			// They already exist, just update coordinates
+			gameState.Players[pId].Pos.X = x
+			gameState.Players[pId].Pos.Y = y
+		}
+
 		gameNet.OnPositionUpdate(pId, x, y)
 
 	case network.GRAB_REQ:

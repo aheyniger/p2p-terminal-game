@@ -1,5 +1,7 @@
 package game
 
+import "github.com/gdamore/tcell/v2"
+
 type PlayerId = string // probably a uuid
 
 type Vec2 struct{ X, Y int } // just holds 2 values, likely for a position/coordinates
@@ -18,7 +20,7 @@ const (
 type Player struct {
 	Id        PlayerId
 	Addr      string // host and port (host should probably be IP address but maybe can be either IP address or hostname)
-	Color     int32
+	Color 		tcell.Color 
 	Pos       Vec2   // location of the player
 	HeldBlock *Block // so we can separate blocks in the game world and identify each individually
 }

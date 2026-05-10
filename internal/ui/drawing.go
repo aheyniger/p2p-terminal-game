@@ -4,11 +4,15 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-func (ui *Ui) DrawTile(x, y int, colorCode int32) {
-	style := DefStyle.Foreground(tcell.NewHexColor(colorCode))
-	if colorCode == 0 {
+func (ui *Ui) DrawTile(x, y int, color tcell.Color) {
+	// Apply the tcell.Color directly to the foreground
+	style := DefStyle.Foreground(color)
+
+	// tcell.ColorDefault is the standard way to check for "no color" in tcell
+	if color == tcell.ColorDefault {
 		style = NoBgStyle
 	}
+
 	s := ui.Screen
 	s.SetContent(x, y, '█', nil, style)
 }

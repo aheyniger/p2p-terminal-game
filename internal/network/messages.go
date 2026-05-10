@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 	// "p2p-terminal-game/internal/game"
+	"github.com/gdamore/tcell/v2"
 )
 
 type MsgType int
@@ -54,7 +55,7 @@ func (n *Network) BroadcastPosition(playerID string, x, y int) {
 	})
 }
 
-func (n *Network) BroadcastJoin(playerID string, playerColor int32) {
+func (n *Network) BroadcastJoin(playerID string, playerColor tcell.Color) {
 	node := n.List.LocalNode().Name
 	timestamp := time.Now().UnixNano()
 	msg := buildMsg(Delim,

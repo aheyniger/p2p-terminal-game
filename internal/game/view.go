@@ -80,21 +80,21 @@ func (view *View) DrawWorld(state WorldState) {
 
 func (view *View) DrawPlayer(player Player) {
 	view.Ui.DrawTile(player.Pos.X, player.Pos.Y, player.Color)
-	if player.HeldBlock != nil{
-		view.Ui.DrawTile(player.Pos.X+1, player.Pos.Y, player.Color)
+	if player.HeldBlock != nil {
+		view.Ui.DrawTile(player.Pos.X+1, player.Pos.Y, (player.Color))
 	}
 }
 
 func (view *View) DrawBlock(block Block) {
-	color := int32(0xFF0000) // default red
+	color := tcell.ColorRed
 
 	// Optional: change color if held
 	if block.HeldBy != "" {
-		// color = int32(0x00FF00) // green if someone is holding it
+		// color = tcell.ColorGreen
 		return
 	}
 
-	view.Ui.DrawTile(block.Pos.X, block.Pos.Y, color)
+	view.Ui.DrawTile(block.Pos.X, block.Pos.Y, (color))
 }
 
 func (view View) GetViewCenter() (int, int) {
@@ -104,9 +104,31 @@ func (view View) GetViewCenter() (int, int) {
 
 func (view View) GetViewSize() (int, int) {
 	width, height := view.Ui.Screen.Size()
-	return width / 2, height / 2
+	return width, height
 }
 
 func (view *View) SetLogLine(line string) {
 	view.Ui.LogLine = line
+}
+
+// Standardize your color palette
+var PlayerPalette = []tcell.Color{
+	tcell.ColorGreen,
+	tcell.ColorYellow,
+	tcell.ColorBlue,
+	tcell.ColorFuchsia,
+	tcell.ColorAqua,
+	tcell.ColorOrange,
+	tcell.ColorLime,
+}
+
+// GetColorFromID turns a UUID into a permanent, deterministic color
+func GetColorFromID(playerID string) tcell.Color {
+	hash := 0
+	for _, char := range playerID {
+		hash += int(char)
+	}
+
+	// Use modulo to safely wrap around the length of your palette
+	return PlayerPalette[hash%len(PlayerPalette)]
 }
