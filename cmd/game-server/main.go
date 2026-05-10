@@ -189,16 +189,23 @@ func main() {
 				w, h := wv.GetViewSize()
 				state.MovePlayer(localPlayer.Id, w/2-localPlayer.Pos.X, h/2-localPlayer.Pos.Y)
 			case ' ':
-			// attempt block grab
-			log.Printf("DEBUG [INPUT]: Spacebar pressed at player pos X:%d Y:%d\n", localPlayer.Pos.X, localPlayer.Pos.Y)
-
+				//fetch latest player state:
+				livePlayer := state.Players[localPlayer.Id]
+				// attempt block grab
+				log.Printf("DEBUG [INPUT]: Spacebar pressed at player pos X:%d Y:%d\n", livePlayer.Pos.X, livePlayer.Pos.Y)
+				if livePlayer.HeldBlock != nil{ //if currently holding block, drop it
+					log.Printf("DEBUG [INPUT]: dropping BLOCK X:%d Y:%d\n", livePlayer.Pos.X, livePlayer.Pos.Y)
+					b := livePlayer.HeldBlock
+					gameNet.BroadcastDropRequest(b.ID, livePlayer.Id, livePlayer.Pos.X, livePlayer.Pos.Y, b.OwnerNode)
+					break;
+				}
 				for _, b := range state.Blocks { //find block at the players position
 					log.Printf("DEBUG [INPUT]: Checking block %s at X:%d Y:%d\n", b.ID, b.Pos.X, b.Pos.Y)
-					if b.Pos.X == localPlayer.Pos.X && b.Pos.Y == localPlayer.Pos.Y {
+					if b.Pos.X == livePlayer.Pos.X && b.Pos.Y == livePlayer.Pos.Y {
 						log.Printf("DEBUG [INPUT]: Hitbox matched! Block is held by: '%s'. Requesting from owner: %s\n", b.HeldBy, b.OwnerNode)
 						if b.HeldBy == "" {
 							// don't assign it yet! ask the owner for permission.
-							gameNet.BroadcastGrabRequest(b.ID, localPlayer.Id, b.OwnerNode)
+							gameNet.BroadcastGrabRequest(b.ID, livePlayer.Id, b.OwnerNode)
 						}
 						break
 					}
@@ -338,17 +345,57 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 			b.HeldBy = playerID
 			success = true
 			log.Printf("DEBUG [GRAB_REQ]: Approved grab! Assigning to %s\n", playerID)
+
+			//apply changes locally, since memberlist only broadcasts to others
+			if p, pExists := gameState.Players[playerID]; pExists {
+				p.HeldBlock = b
+				log.Println("DEBUG [GRAB_REQ]: Applied HeldBlock state locally for the owner node.")
+			}
 		}
 
 		// broadcast result
 		gameNet.BroadcastGrabResult(blockID, playerID, success, b.OwnerNode)
 
 	case network.GRAB_RES:
+		log.Printf("DEBUG [GRAB_RES]: Received message! Raw parts: %v\n", parts)
+
 		blockID := parts[3]
 		playerID := parts[4]
 		success := MustAtoi(parts[5]) == 1
 
+		log.Printf("DEBUG [GRAB_RES]: Parsed - Block: %s, Player: %s, Success: %v\n", blockID, playerID, success)
+
+
 		if !success {
+			log.Println("DEBUG [GRAB_RES]: Success was false, returning early.")
+			return
+		}
+
+		b, exists := gameState.Blocks[blockID]
+		if !exists {
+			log.Printf("DEBUG [GRAB_RES]: Block %s not found in gameState!\n", blockID)
+			return
+		}
+
+		b.HeldBy = playerID
+		log.Printf("DEBUG [GRAB_RES]: Set block %s HeldBy to %s\n", blockID, playerID)
+		
+		if p, pExists := gameState.Players[playerID]; pExists {
+			p.HeldBlock = b
+			log.Printf("DEBUG [GRAB_RES]: SUCCESS! Attached block to player %s's HeldBlock field!\n", playerID)
+		}else {
+			log.Printf("DEBUG [GRAB_RES]: ERROR - Player %s not found in gameState.Players!\n", playerID)
+		}
+
+
+	case network.DROP_REQ:
+		blockID := parts[3]
+		playerID := parts[4]
+		dropX := MustAtoi(parts[5]) // Assuming you have a MustAtoi helper, or use strconv.Atoi
+		dropY := MustAtoi(parts[6])
+		owner := parts[7]
+
+		if owner != gameNet.LocalName {
 			return
 		}
 
@@ -357,10 +404,61 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 			return
 		}
 
-		b.HeldBy = playerID
-		
+		isOccupied := false //check if we can place block there, or if theres already a block
+
+		for _, otherBlock := range gameState.Blocks{
+			if otherBlock.ID == blockID{
+				continue;
+			}
+			if otherBlock.Pos.X == dropX && otherBlock.Pos.Y == dropY && otherBlock.HeldBy == ""{
+				isOccupied = true
+				break
+			}
+		}
+
+		success := false
+		// Validate that the requester actually owns the block right now and that the space is free
+		if !isOccupied && b.HeldBy == playerID {
+			b.HeldBy = ""
+			b.Pos.X = dropX
+			b.Pos.Y = dropY
+			success = true
+
+			if p, pExists := gameState.Players[playerID]; pExists {
+				p.HeldBlock = nil
+				log.Println("DEBUG [DROP_REQ]: Applied HeldBlock state locally for the owner node.")
+			}
+		}
+
+		gameNet.BroadcastDropResult(blockID, playerID, dropX, dropY, success)
+
+	case network.DROP_RES:
+		blockID := parts[3]
+		playerID := parts[4]
+		dropX := MustAtoi(parts[5])
+		dropY := MustAtoi(parts[6])
+		success := parts[7] == "1"
+
+		if !success {
+			return
+		}
+
+		b, bExists := gameState.Blocks[blockID]
+		if !bExists {
+			return
+		}
+
+		// 1. Unassign the block and update its physical coordinates
+		b.HeldBy = ""
+		b.Pos.X = dropX
+		b.Pos.Y = dropY
+
+		// 2. Clear the block from the player, making them shrink back to 1x1
 		if p, pExists := gameState.Players[playerID]; pExists {
-			p.HeldBlock = b
+			// Double check they are holding THIS block to prevent race conditions
+			if p.HeldBlock != nil && p.HeldBlock.ID == blockID {
+				p.HeldBlock = nil
+			}
 		}
 
 	case network.BLOCK_SPAWN:
@@ -399,31 +497,6 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		}
 
 	}
-
-	// id := parts[1]
-	// // timestamp := parts[2]
-	// message := parts[3]
-
-	// // Deduplicate using ID
-	// if seenMsg[id] {
-	// 	return
-	// }
-	// seenMsg[id] = true
-
-	// // Clean display
-	// formatted := fmt.Sprintf("[%s] %s", node, message)
-
-	// fmt.Println(formatted)
-
-	// // Append to file
-	// f, err := os.OpenFile("shared.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	log.Println("File error:", err)
-	// 	return
-	// }
-	// defer f.Close()
-
-	// f.WriteString(logLine + "\n")
 }
 
 func getNextOwner(gameNet *network.Network, leavingNode string) string {

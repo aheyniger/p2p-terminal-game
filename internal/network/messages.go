@@ -93,7 +93,7 @@ func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, ow
 		result = 1
 	}
 
-	msg := fmt.Sprintf("%s|%d|%d|%s|%s|%d",
+	msg := buildMsg(Delim,
 		n.LocalName,
 		time.Now().UnixNano(),
 		GRAB_RES,
@@ -102,6 +102,45 @@ func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, ow
 		result,
 	)
 
+	n.Broadcast(msg)
+}
+
+func (n *Network) BroadcastDropRequest(blockID, playerID string, dropX, dropY int, owner string) {
+	node := n.List.LocalNode().Name
+	timestamp := time.Now().UnixNano()
+	msg := buildMsg(Delim,
+		node,
+		timestamp,
+		DROP_REQ,
+		blockID,
+		playerID,
+		dropX,
+		dropY,
+		owner,
+	)
+
+	// Send directly to the owner, same as GRAB_REQ
+	n.SendDirect(owner, msg)
+}
+
+func (n *Network) BroadcastDropResult(blockID, playerID string, dropX, dropY int, success bool) {
+	result := 0
+	if success {
+		result = 1
+	}
+
+	msg := buildMsg(Delim,
+		n.LocalName,
+		time.Now().UnixNano(),
+		DROP_RES,
+		blockID,
+		playerID,
+		dropX,
+		dropY,
+		result,
+	)
+
+	// Broadcast to everyone so they update the block's new position
 	n.Broadcast(msg)
 }
 
