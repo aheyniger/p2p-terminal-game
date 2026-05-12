@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -11,11 +12,11 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"encoding/json"
+
+	"sort"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/google/uuid"
-	"sort"
 )
 
 func main() {
@@ -36,36 +37,36 @@ func main() {
 	}
 
 	// Set up TCP State Sync Callbacks
-    gameNet.GetLocalState = func() []byte {
-        mu.Lock()
-        defer mu.Unlock()
-        
-        // Serialize the current blocks map into JSON
-        b, err := json.Marshal(state.Blocks)
-        if err != nil {
-            log.Println("Error marshaling local state:", err)
-            return []byte{}
-        }
-        return b
-    }
+	gameNet.GetLocalState = func() []byte {
+		mu.Lock()
+		defer mu.Unlock()
 
-    gameNet.MergeState = func(buf []byte) {
-        mu.Lock()
-        defer mu.Unlock()
-        
-        var remoteBlocks map[string]*game.Block
-        if err := json.Unmarshal(buf, &remoteBlocks); err != nil {
-            log.Println("Error unmarshaling remote state:", err)
-            return
-        }
+		// Serialize the current blocks map into JSON
+		b, err := json.Marshal(state.Blocks)
+		if err != nil {
+			log.Println("Error marshaling local state:", err)
+			return []byte{}
+		}
+		return b
+	}
 
-        // Merge the incoming blocks into the local state safely
-        for id, block := range remoteBlocks {
-            if _, exists := state.Blocks[id]; !exists {
-                state.Blocks[id] = block
-            }
-        }
-    }
+	gameNet.MergeState = func(buf []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		var remoteBlocks map[string]*game.Block
+		if err := json.Unmarshal(buf, &remoteBlocks); err != nil {
+			log.Println("Error unmarshaling remote state:", err)
+			return
+		}
+
+		// Merge the incoming blocks into the local state safely
+		for id, block := range remoteBlocks {
+			if _, exists := state.Blocks[id]; !exists {
+				state.Blocks[id] = block
+			}
+		}
+	}
 
 	f, err := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -95,7 +96,6 @@ func main() {
 	gameNet.LeaveEventCh = leaveEventCh
 
 	gameNet.BroadcastJoin(localPlayer.Id, localPlayer.Color)
-
 
 	// Wait for cluster to acknowledge us before broadcasting our new blocks
 	if outgoingConn {
@@ -185,6 +185,9 @@ func main() {
 
 		case tcell.KeyRune:
 			switch e.Rune() {
+			case 'm', 'M':
+				convergenceTime := gameNet.TestBroadcastAndMeasure()
+				log.Printf("Convergence time measured at %dms\n", convergenceTime.Milliseconds())
 			case 'r', 'R':
 				w, h := wv.GetViewSize()
 				state.MovePlayer(localPlayer.Id, w/2-localPlayer.Pos.X, h/2-localPlayer.Pos.Y)
@@ -193,11 +196,11 @@ func main() {
 				livePlayer := state.Players[localPlayer.Id]
 				// attempt block grab
 				log.Printf("DEBUG [INPUT]: Spacebar pressed at player pos X:%d Y:%d\n", livePlayer.Pos.X, livePlayer.Pos.Y)
-				if livePlayer.HeldBlock != nil{ //if currently holding block, drop it
+				if livePlayer.HeldBlock != nil { //if currently holding block, drop it
 					log.Printf("DEBUG [INPUT]: dropping BLOCK X:%d Y:%d\n", livePlayer.Pos.X, livePlayer.Pos.Y)
 					b := livePlayer.HeldBlock
 					gameNet.BroadcastDropRequest(b.ID, livePlayer.Id, livePlayer.Pos.X, livePlayer.Pos.Y, b.OwnerNode)
-					break;
+					break
 				}
 				for _, b := range state.Blocks { //find block at the players position
 					log.Printf("DEBUG [INPUT]: Checking block %s at X:%d Y:%d\n", b.ID, b.Pos.X, b.Pos.Y)
@@ -212,7 +215,6 @@ func main() {
 				}
 			}
 
-		
 		}
 
 		// broadcast AFTER state change
@@ -257,14 +259,14 @@ func main() {
 				}
 			}
 			return
-	
+
 		case line := <-logCh:
 			log.Println(line)
 			wv.SetLogLine(line)
-		
+
 		case event := <-leaveEventCh:
 			mu.Lock()
-			
+
 			// 1. remove the player
 			delete(state.Players, event.PlayerID)
 
@@ -275,14 +277,14 @@ func main() {
 			for _, b := range state.Blocks {
 				if b.OwnerNode == event.NodeName {
 					b.OwnerNode = newOwner
-					
+
 					// safety check: if the player who left was currently holding the block, drop it
 					if b.HeldBy == event.PlayerID {
 						b.HeldBy = ""
 					}
 				}
 			}
-			
+
 			mu.Unlock()
 		}
 
@@ -325,7 +327,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 				Id:  pId,
 				Pos: game.Vec2{X: x, Y: y},
 				// Assign their permanent color instantly without asking the network
-				Color: game.GetColorFromID(pId), 
+				Color: game.GetColorFromID(pId),
 			}
 		} else {
 			// They already exist, just update coordinates
@@ -348,7 +350,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		}
 
 		// b, exists := gameState.FindBlockByID(blockID)
-		b:= gameState.FindBlockByID(blockID)
+		b := gameState.FindBlockByID(blockID)
 		if b == nil {
 			log.Printf("DEBUG [GRAB_REQ]: Block %s not found in my state!\n", blockID)
 			return
@@ -380,7 +382,6 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 
 		log.Printf("DEBUG [GRAB_RES]: Parsed - Block: %s, Player: %s, Success: %v\n", blockID, playerID, success)
 
-
 		if !success {
 			log.Println("DEBUG [GRAB_RES]: Success was false, returning early.")
 			return
@@ -394,14 +395,13 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 
 		b.HeldBy = playerID
 		log.Printf("DEBUG [GRAB_RES]: Set block %s HeldBy to %s\n", blockID, playerID)
-		
+
 		if p, pExists := gameState.Players[playerID]; pExists {
 			p.HeldBlock = b
 			log.Printf("DEBUG [GRAB_RES]: SUCCESS! Attached block to player %s's HeldBlock field!\n", playerID)
-		}else {
+		} else {
 			log.Printf("DEBUG [GRAB_RES]: ERROR - Player %s not found in gameState.Players!\n", playerID)
 		}
-
 
 	case network.DROP_REQ:
 		blockID := parts[3]
@@ -421,11 +421,11 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 
 		isOccupied := false //check if we can place block there, or if theres already a block
 
-		for _, otherBlock := range gameState.Blocks{
-			if otherBlock.ID == blockID{
-				continue;
+		for _, otherBlock := range gameState.Blocks {
+			if otherBlock.ID == blockID {
+				continue
 			}
-			if otherBlock.Pos.X == dropX && otherBlock.Pos.Y == dropY && otherBlock.HeldBy == ""{
+			if otherBlock.Pos.X == dropX && otherBlock.Pos.Y == dropY && otherBlock.HeldBy == "" {
 				isOccupied = true
 				break
 			}
@@ -482,7 +482,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		y := MustAtoi(parts[5])
 		owner := parts[6]
 
-		if _, exists:= gameState.Blocks[blockID]; exists{
+		if _, exists := gameState.Blocks[blockID]; exists {
 			return //so we dont overwrite
 		}
 
@@ -511,12 +511,20 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 			OwnerNode: owner,
 		}
 
+	case network.TEST_GOSSIP:
+		gameNet.SendTestGossipAck(node, parts[3])
+
+	case network.TEST_GOSSIP_ACK:
+		if ch, ok := gameNet.PendingAcks.Load(parts[3]); ok {
+			ch.(chan network.NodeTime) <- network.NodeTime{AckTime: time.Now(), NodeName: node}
+		}
 	}
+
 }
 
 func getNextOwner(gameNet *network.Network, leavingNode string) string {
 	var activeNodes []string
-	
+
 	for _, m := range gameNet.List.Members() {
 		// exclude the node that is actively leaving
 		if m.Name != leavingNode {
@@ -531,7 +539,7 @@ func getNextOwner(gameNet *network.Network, leavingNode string) string {
 
 	// alphabetically sort the remaining nodes to ensure deterministic selection
 	sort.Strings(activeNodes)
-	return activeNodes[0] 
+	return activeNodes[0]
 }
 
 func connectToLobby(outgoing bool, logCh chan string) *network.Network {

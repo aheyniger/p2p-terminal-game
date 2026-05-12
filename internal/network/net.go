@@ -3,10 +3,13 @@ package my_net
 import (
 	"fmt"
 	"log"
+	"net"
 	"sync"
+	"time"
 
 	. "p2p_game/internal/misc"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/memberlist"
 )
 
@@ -14,8 +17,6 @@ type LeaveEvent struct {
 	NodeName string
 	PlayerID string
 }
-
-
 
 type Network struct {
 	List  *memberlist.Memberlist
@@ -26,11 +27,14 @@ type Network struct {
 	OnMsg            func([]byte)
 	OnPositionUpdate func(id string, x, y int)
 	LocalName        string
-	LeaveEventCh  chan LeaveEvent 
+	LeaveEventCh     chan LeaveEvent
 
 	//for tcp state sync (slower but more reliable than udp. still use udp for update messages)
 	GetLocalState func() []byte
-    MergeState    func([]byte)
+	MergeState    func([]byte)
+
+	// for performance benchmarking
+	PendingAcks sync.Map
 }
 
 type delegate struct {
@@ -44,19 +48,19 @@ type Message struct {
 	Y    int
 }
 
-func (d *delegate) NodeMeta(limit int) []byte              { return nil }
-func (d *delegate) LocalState(join bool) []byte            { 
+func (d *delegate) NodeMeta(limit int) []byte { return nil }
+func (d *delegate) LocalState(join bool) []byte {
 	// world state to send over TCP
-    if d.net.GetLocalState != nil {
-        return d.net.GetLocalState()
-    }
-    return []byte{}
- }
+	if d.net.GetLocalState != nil {
+		return d.net.GetLocalState()
+	}
+	return []byte{}
+}
 func (d *delegate) MergeRemoteState(buf []byte, join bool) {
 	//  TCP state from the cluster, to merge
-    if d.net.MergeState != nil {
-        d.net.MergeState(buf)
-    }
+	if d.net.MergeState != nil {
+		d.net.MergeState(buf)
+	}
 }
 
 func (d *delegate) NotifyMsg(msg []byte) {
@@ -166,6 +170,82 @@ func CreateNetwork(name string, bindIP string, port int, logCh chan string) (*Ne
 // 		msg: []byte(full),
 // 	})
 // }
+
+type NodeTime struct {
+	AckTime  time.Time
+	NodeName string
+}
+
+func (n *Network) TestBroadcastAndMeasure() time.Duration {
+	var acksReceived map[string]struct{}
+	acksReceived = make(map[string]struct{})
+
+	msgId := uuid.NewString()
+	expected := n.List.NumMembers() - 1
+
+	acks := make(chan NodeTime, expected)
+	n.PendingAcks.Store(msgId, acks)
+
+	msg := buildMsg(Delim,
+		n.LocalName,
+		time.Now().UnixNano(),
+		TEST_GOSSIP,
+		msgId,
+	)
+	n.Broadcast(msg)
+
+	broadcastTime := time.Now()
+
+	received := 0
+	var lastAck time.Time
+	var lastAckNode string
+	timeout := time.After(10 * time.Second)
+	for received < expected {
+		select {
+		case nt := <-acks:
+			if _, ok := acksReceived[nt.NodeName]; !ok {
+				received++
+				acksReceived[nt.NodeName] = struct{}{}
+				if nt.AckTime.After(lastAck) {
+					lastAck = nt.AckTime
+					lastAckNode = nt.NodeName
+				}
+			}
+		case <-timeout:
+			log.Printf("only %d/%d acks received\n", received, expected)
+			goto done
+		}
+	}
+
+done:
+
+	convergenceTime := lastAck.Sub(broadcastTime)
+
+	n.PendingAcks.Delete(msgId)
+	log.Printf("Last ack came from %s and took %v\n", lastAckNode, convergenceTime)
+
+	var rtt time.Duration
+	var err error
+	for _, node := range n.List.Members() {
+		if node.Name == lastAckNode {
+			addr := &net.UDPAddr{
+				IP:   node.Addr,
+				Port: int(node.Port),
+			}
+			rtt, err = n.List.Ping(node.Name, addr)
+			if err == nil {
+				log.Printf("RTT to %s: %v\n", node.Name, rtt)
+			}
+			break
+		}
+	}
+
+	if rtt != 0 {
+		convergenceTime = convergenceTime - rtt/2
+	}
+
+	return convergenceTime
+}
 
 func buildMoveMessage(playerID string, x, y int) string {
 	return fmt.Sprintf("%s|%d|%d", playerID, x, y)
