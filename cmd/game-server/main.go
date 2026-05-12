@@ -69,7 +69,8 @@ func main() {
 		}
 	}
 
-	f, err := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	hostname, _ := os.Hostname()
+	f, err := os.OpenFile(hostname+".debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println("File error:", err)
 		return

@@ -136,6 +136,9 @@ func CreateNetwork(name string, bindIP string, port int, logCh chan string) (*Ne
 
 	config.Logger = logger
 
+	config.GossipInterval = 50 * time.Millisecond
+	config.GossipNodes = 3
+
 	queue := &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
 			if n.List == nil {
@@ -192,9 +195,11 @@ func (n *Network) TestBroadcastAndMeasure() time.Duration {
 		TEST_GOSSIP,
 		msgId,
 	)
-	n.Broadcast(msg)
+	sentAt := make(chan time.Time, 1)
+	tb := &TimedBroadcast{msg: []byte(msg), sentAt: sentAt}
+	n.Queue.QueueBroadcast(tb)
 
-	broadcastTime := time.Now()
+	broadcastTime := <-sentAt
 
 	received := 0
 	var lastAck time.Time
@@ -276,3 +281,19 @@ func (b *broadcast) Message() []byte {
 }
 
 func (b *broadcast) Finished() {}
+
+type TimedBroadcast struct {
+	msg    []byte
+	sentAt chan time.Time
+	once   sync.Once
+}
+
+func (b *TimedBroadcast) Message() []byte {
+	b.once.Do(func() {
+		b.sentAt <- time.Now()
+	})
+	return b.msg
+}
+
+func (b *TimedBroadcast) Invalidates(other memberlist.Broadcast) bool { return false }
+func (b *TimedBroadcast) Finished()                                   {}
