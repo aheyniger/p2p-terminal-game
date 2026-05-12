@@ -136,7 +136,7 @@ func CreateNetwork(name string, bindIP string, port int, logCh chan string) (*Ne
 
 	config.Logger = logger
 
-	config.GossipInterval = 50 * time.Millisecond
+	config.GossipInterval = 10 * time.Millisecond
 	config.GossipNodes = 3
 
 	queue := &memberlist.TransmitLimitedQueue{

@@ -610,11 +610,13 @@ func connectToLobby(outgoing bool, logCh chan string) *network.Network {
 	// If join address provided → join cluster
 	if outgoing {
 		joinAddr := os.Args[2]
+		joinStart := time.Now()
 		n, err := gameNet.List.Join([]string{joinAddr})
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("Joined %d nodes\n", n)
+		joinLatency := time.Now().Sub(joinStart)
+		fmt.Printf("Joined %d nodes (synced state over TCP in %v)\n", n, joinLatency)
 	}
 
 	fmt.Println("Node started:", machineName)
