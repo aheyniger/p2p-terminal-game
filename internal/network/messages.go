@@ -77,7 +77,7 @@ func (n *Network) BroadcastJoin(playerID string, playerColor tcell.Color) {
 
 // broadcast grab requests by non owners
 // now a direct send, not technically a broadcast
-func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
+func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string, reqID string) {
 	node := n.List.LocalNode().Name
 	timestamp := time.Now().UnixNano()
 	msg := buildMsg(Delim,
@@ -87,6 +87,7 @@ func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
 		blockID,
 		playerID,
 		owner,
+		reqID,
 	)
 
 	n.SendDirect(owner, msg)
@@ -135,13 +136,14 @@ func (n *Network) BroadcastDropResult(reqID string, blockID, playerID string, dr
 		result = 1
 	}
 
-	msg := buildMsg(Delim,
+	msg := buildMsg(
+		Delim,
 		n.LocalName,
 		time.Now().UnixNano(),
 		DROP_RES,
+		reqID,
 		blockID,
 		playerID,
-		reqID,
 		dropX,
 		dropY,
 		result,

@@ -234,6 +234,8 @@ func main() {
 				w, h := wv.GetViewSize()
 				state.MovePlayer(localPlayer.Id, w/2-localPlayer.Pos.X, h/2-localPlayer.Pos.Y)
 			case ' ':
+				//generate req id
+				reqID := uuid.NewString()
 				//fetch latest player state:
 				livePlayer := state.Players[localPlayer.Id]
 				// attempt block grab
@@ -250,7 +252,7 @@ func main() {
 						log.Printf("DEBUG [INPUT]: Hitbox matched! Block is held by: '%s'. Requesting from owner: %s\n", b.HeldBy, b.OwnerNode)
 						if b.HeldBy == "" {
 							// don't assign it yet! ask the owner for permission.
-							gameNet.BroadcastGrabRequest(b.ID, livePlayer.Id, b.OwnerNode)
+							gameNet.BroadcastGrabRequest(b.ID, livePlayer.Id, b.OwnerNode, reqID)
 						}
 						break
 					}
@@ -307,15 +309,17 @@ func main() {
 			wv.SetLogLine(line)
 
 		case event := <-leaveEventCh:
+			// var shouldReplay bool
 			mu.Lock()
 
-			
-
+		
 			// 1. remove the player
 			delete(state.Players, event.PlayerID)
 
 			// 2. figure out who takes over the blocks
 			newOwner := getNextOwner(gameNet, event.NodeName)
+
+			
 
 			// 3. reassign orphaned blocks
 			for _, b := range state.Blocks {
@@ -327,6 +331,12 @@ func main() {
 						b.HeldBy = ""
 					}
 				}
+				log.Printf(
+					"DEBUG [LEAVE]: Reassigning block %s owner %s -> %s",
+					b.ID,
+					event.NodeName,
+					newOwner,
+				)
 			}
 
 			for _, req := range state.Pending {
@@ -334,26 +344,41 @@ func main() {
 					// transfer responsibility
 					req.OwnerNode = newOwner
 				}
+				log.Printf(
+					"DEBUG [LEAVE]: Reassigning pending req %s from %s -> %s",
+					req.RequestID,
+					event.NodeName,
+					newOwner,
+				)
 			}
 
-			if newOwner == gameNet.LocalName {
-				for _, req := range state.Pending {
-					if req.OwnerNode != gameNet.LocalName {
-						continue
-					}
+			
 
-					switch req.Type {
+			
 
-					case game.PendingGrab:
-						replayGrab(state, gameNet, req)
+			// if newOwner == gameNet.LocalName {
+			// 	shouldReplay = true
+				// for _, req := range state.Pending {
+				// 	if req.OwnerNode != gameNet.LocalName {
+				// 		continue
+				// 	}
 
-					case game.PendingDrop:
-						replayDrop(state, gameNet, req)
-					}
-				}
-			}
+				// 	switch req.Type {
+
+				// 	case game.PendingGrab:
+				// 		replayGrab(state, gameNet, req)
+
+				// 	case game.PendingDrop:
+				// 		replayDrop(state, gameNet, req)
+				// 	}
+				// }
+			// }
 
 			mu.Unlock()
+
+			// if shouldReplay{
+			// 	replayPendingRequests(state, gameNet)
+			// }
 
 			if newOwner == gameNet.LocalName { //todo: check if this is necessary
 				replayPendingRequests(state, gameNet)
@@ -433,13 +458,14 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		blockID := parts[3]
 		playerID := parts[4]
 		owner := parts[5]
+		reqID := parts[6]
 
 		log.Printf("DEBUG [GRAB_REQ]: Received req for block %s by player %s. Target Owner: %s, My Name: %s\n", blockID, playerID, owner, gameNet.LocalName)
 
 		//all nodes store pending request so if owner leaves, new owner already has it
 		//todo: need to clear the pending requests map for all other nodes as well so they don't store requests forever
 		req := &game.PendingRequest{
-			RequestID: uuid.NewString(),
+			RequestID: reqID,
 			Type:      game.PendingGrab,
 			BlockID:   blockID,
 			PlayerID:  playerID,
@@ -477,7 +503,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 
 		// broadcast result
 		gameNet.BroadcastGrabResult(req.RequestID, blockID, playerID, success, b.OwnerNode)
-		delete(gameState.Pending, req.RequestID)
+		
 
 	case network.GRAB_RES:
 		log.Printf("DEBUG [GRAB_RES]: Received message! Raw parts: %v\n", parts)
@@ -485,7 +511,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		reqID := parts[3]
 		blockID := parts[4]
 		playerID := parts[5]
-		success := parts[8] == "1"
+		success := parts[6] == "1"
 
 		log.Printf("DEBUG [GRAB_RES]: Parsed - Block: %s, Player: %s, Success: %v\n", blockID, playerID, success)
 
@@ -586,12 +612,12 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		gameNet.BroadcastDropResult(req.RequestID, blockID, playerID, dropX, dropY, success)
 
 	case network.DROP_RES:
-		reqID := parts[2]
-		blockID := parts[3]
-		playerID := parts[4]
-		dropX := MustAtoi(parts[5])
-		dropY := MustAtoi(parts[6])
-		success := parts[7] == "1"
+		reqID := parts[3]
+		blockID := parts[4]
+		playerID := parts[5]
+		dropX := MustAtoi(parts[6])
+		dropY := MustAtoi(parts[7])
+		success := parts[8] == "1"
 
 		if !success {
 			return
@@ -687,7 +713,16 @@ func replayPendingRequests(
 	gameState *game.WorldState,
 	gameNet *network.Network,
 ) {
+	
 	for _, req := range gameState.Pending {
+
+		//debugging
+		log.Printf(
+			"DEBUG [REPLAY]: Replaying request %s type=%s owner=%s",
+			req.RequestID,
+			req.Type,
+			req.OwnerNode,
+		)
 
 		if req.OwnerNode != gameNet.LocalName {
 			continue
