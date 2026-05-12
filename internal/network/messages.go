@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
 	// "p2p-terminal-game/internal/game"
 	"github.com/gdamore/tcell/v2"
 )
@@ -19,6 +20,8 @@ const (
 	DROP_RES
 	BLOCK_SPAWN
 	STATE_SYNC
+	TEST_GOSSIP
+	TEST_GOSSIP_ACK
 )
 
 const Delim = "~|"
@@ -72,7 +75,7 @@ func (n *Network) BroadcastJoin(playerID string, playerColor tcell.Color) {
 }
 
 // broadcast grab requests by non owners
-//now a direct send, not technically a broadcast
+// now a direct send, not technically a broadcast
 func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
 	node := n.List.LocalNode().Name
 	timestamp := time.Now().UnixNano()
@@ -181,4 +184,22 @@ func (n *Network) BroadcastStateSync(id string, posX int, posY int, owner string
 	n.Queue.QueueBroadcast(&broadcast{
 		msg: []byte(msg),
 	})
+}
+
+func (n *Network) SendTestGossipAck(senderName string, msgId string) {
+	node := n.List.LocalNode().Name
+	timestamp := time.Now().UnixNano()
+
+	msg := buildMsg(Delim,
+		node,
+		timestamp,
+		TEST_GOSSIP_ACK,
+		msgId,
+	)
+
+	for _, remoteNode := range n.List.Members() {
+		if remoteNode.Name == senderName {
+			n.List.SendBestEffort(remoteNode, []byte(msg))
+		}
+	}
 }

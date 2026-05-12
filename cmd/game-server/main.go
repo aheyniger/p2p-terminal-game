@@ -186,6 +186,7 @@ func main() {
 
 		case tcell.KeyRune:
 			switch e.Rune() {
+<<<<<<< HEAD
 			case 'd', 'D':
 				if danceCancel != nil {
 					close(danceCancel)
@@ -226,6 +227,11 @@ func main() {
 						}
 					}(danceCancel)
 				}
+=======
+			case 'm', 'M':
+				convergenceTime := gameNet.TestBroadcastAndMeasure()
+				log.Printf("Convergence time measured at %dms\n", convergenceTime.Milliseconds())
+>>>>>>> c6704b95e3e9a194cf3d0b25303bcc3359c98814
 			case 'r', 'R':
 				w, h := wv.GetViewSize()
 				state.MovePlayer(localPlayer.Id, w/2-localPlayer.Pos.X, h/2-localPlayer.Pos.Y)
@@ -555,7 +561,15 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 			OwnerNode: owner,
 		}
 
+	case network.TEST_GOSSIP:
+		gameNet.SendTestGossipAck(node, parts[3])
+
+	case network.TEST_GOSSIP_ACK:
+		if ch, ok := gameNet.PendingAcks.Load(parts[3]); ok {
+			ch.(chan network.NodeTime) <- network.NodeTime{AckTime: time.Now(), NodeName: node}
+		}
 	}
+
 }
 
 // todo: will this load a single node too much if lots leave? change to have a more spread out new owner distribution
