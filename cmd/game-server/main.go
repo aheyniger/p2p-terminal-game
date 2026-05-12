@@ -186,7 +186,6 @@ func main() {
 
 		case tcell.KeyRune:
 			switch e.Rune() {
-<<<<<<< HEAD
 			case 'd', 'D':
 				if danceCancel != nil {
 					close(danceCancel)
@@ -227,11 +226,9 @@ func main() {
 						}
 					}(danceCancel)
 				}
-=======
 			case 'm', 'M':
 				convergenceTime := gameNet.TestBroadcastAndMeasure()
 				log.Printf("Convergence time measured at %dms\n", convergenceTime.Milliseconds())
->>>>>>> c6704b95e3e9a194cf3d0b25303bcc3359c98814
 			case 'r', 'R':
 				w, h := wv.GetViewSize()
 				state.MovePlayer(localPlayer.Id, w/2-localPlayer.Pos.X, h/2-localPlayer.Pos.Y)
