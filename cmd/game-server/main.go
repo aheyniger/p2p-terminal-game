@@ -124,7 +124,7 @@ func main() {
 				Y: rand.IntN(20),
 			},
 			HeldBy:    "", //held by no one
-			OwnerNode: gameNet.LocalName,
+			OwnerNode: gameNet.LocalName, //by default, original owner is the player that joined
 		}
 
 		// fmt.Println("SPAWN:", block.ID)
@@ -514,6 +514,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 	}
 }
 
+//todo: will this load a single node too much if lots leave? change to have a more spread out new owner distribution
 func getNextOwner(gameNet *network.Network, leavingNode string) string {
 	var activeNodes []string
 	
@@ -528,7 +529,7 @@ func getNextOwner(gameNet *network.Network, leavingNode string) string {
 	if len(activeNodes) == 0 {
 		return gameNet.LocalName
 	}
-
+	
 	// alphabetically sort the remaining nodes to ensure deterministic selection
 	sort.Strings(activeNodes)
 	return activeNodes[0] 
