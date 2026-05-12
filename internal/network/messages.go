@@ -18,6 +18,7 @@ const (
 	GRAB_RES
 	DROP_REQ
 	DROP_RES
+	PENDING_REQ
 	BLOCK_SPAWN
 	STATE_SYNC
 	TEST_GOSSIP
@@ -91,7 +92,7 @@ func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
 	n.SendDirect(owner, msg)
 }
 
-func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, owner string) {
+func (n *Network) BroadcastGrabResult(reqID string, blockID, playerID string,success bool, owner string) {
 	result := 0
 	if success {
 		result = 1
@@ -101,6 +102,7 @@ func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, ow
 		n.LocalName,
 		time.Now().UnixNano(),
 		GRAB_RES,
+		reqID,
 		blockID,
 		playerID,
 		result,
@@ -127,7 +129,7 @@ func (n *Network) BroadcastDropRequest(blockID, playerID string, dropX, dropY in
 	n.SendDirect(owner, msg)
 }
 
-func (n *Network) BroadcastDropResult(blockID, playerID string, dropX, dropY int, success bool) {
+func (n *Network) BroadcastDropResult(reqID string, blockID, playerID string, dropX, dropY int,  success bool) {
 	result := 0
 	if success {
 		result = 1
@@ -139,6 +141,7 @@ func (n *Network) BroadcastDropResult(blockID, playerID string, dropX, dropY int
 		DROP_RES,
 		blockID,
 		playerID,
+		reqID,
 		dropX,
 		dropY,
 		result,
@@ -202,4 +205,22 @@ func (n *Network) SendTestGossipAck(senderName string, msgId string) {
 			n.List.SendBestEffort(remoteNode, []byte(msg))
 		}
 	}
+}
+
+
+func (n *Network) BroadcastPendingRequest(reqID string, blockID string, reqType string, playerID string, ownerNode string, dropX int, dropY int ) {
+	msg := buildMsg(Delim,
+		PENDING_REQ,
+		reqID,
+		reqType,
+		blockID,
+		playerID,
+		dropX,
+		dropY,
+		ownerNode,
+	)
+
+	n.Queue.QueueBroadcast(&broadcast{
+		msg: []byte(msg),
+	})
 }

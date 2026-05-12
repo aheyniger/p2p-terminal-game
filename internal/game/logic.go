@@ -6,6 +6,13 @@ const NumCoordLocks = 64
 
 var coordLocks [NumCoordLocks]sync.Mutex
 
+type PendingRequestType string
+
+const (
+	PendingGrab PendingRequestType = "grab"
+	PendingDrop PendingRequestType = "drop"
+)
+
 func (w *WorldState) MovePlayer(id PlayerId, dx, dy int) {
 	p, ok := w.Players[id]
 	if !ok {
@@ -52,3 +59,4 @@ func (w *WorldState) GetCoordLock(x, y int) *sync.Mutex {
 	
 	return &coordLocks[hash%NumCoordLocks]
 }
+
