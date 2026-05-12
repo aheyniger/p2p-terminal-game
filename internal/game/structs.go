@@ -43,6 +43,7 @@ type WorldState struct {
 	Players map[PlayerId]*Player
 	Blocks  map[string]*Block
 	Version uint64 // for lamport timestamps, keeping track of what game state is newest
+	
 }
 
 // type MsgType string

@@ -1,5 +1,11 @@
 package game
 
+import "sync"
+
+const NumCoordLocks = 64
+
+var coordLocks [NumCoordLocks]sync.Mutex
+
 func (w *WorldState) MovePlayer(id PlayerId, dx, dy int) {
 	p, ok := w.Players[id]
 	if !ok {
@@ -33,4 +39,16 @@ func (w *WorldState) FindBlockByID(playerID PlayerId) *Block {
 		}
 	}
 	return nil
+}
+
+func (w *WorldState) GetCoordLock(x, y int) *sync.Mutex {
+	// A standard spatial hashing formula using large primes
+	hash := (x * 73856093) ^ (y * 19349663)
+	
+	// Ensure the hash is positive before modulo
+	if hash < 0 {
+		hash = -hash
+	}
+	
+	return &coordLocks[hash%NumCoordLocks]
 }

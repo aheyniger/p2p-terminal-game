@@ -195,7 +195,7 @@ func main() {
 					lastKey = "Dance START"
 
 					go func(cancel chan struct{}) {
-						ticker := time.NewTicker(200 * time.Millisecond)
+						ticker := time.NewTicker(200 * time.Millisecond) //change to 50 for faster dancing and more broadcasts (more load)
 						defer ticker.Stop()
 						for {
 							select {
@@ -457,6 +457,10 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 			return
 		}
 
+		//lock coordinate so can safely check if coords are occupied
+		coordMu := gameState.GetCoordLock(dropX, dropY)
+		coordMu.Lock()
+
 		isOccupied := false //check if we can place block there, or if theres already a block
 
 		for _, otherBlock := range gameState.Blocks {
@@ -482,6 +486,8 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 				log.Println("DEBUG [DROP_REQ]: Applied HeldBlock state locally for the owner node.")
 			}
 		}
+
+		coordMu.Unlock()
 
 		gameNet.BroadcastDropResult(blockID, playerID, dropX, dropY, success)
 
