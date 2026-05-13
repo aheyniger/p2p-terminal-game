@@ -37,7 +37,7 @@ func (view *View) RenderLoop(state *WorldState, keyInputHandler func(e *tcell.Ev
 	}()
 
 	//todo: fix this
-	view.Ui.SetHeaderField("Blocks", fmt.Sprintf("%d", len(state.Blocks)))
+	// view.Ui.SetHeaderField("Blocks", fmt.Sprintf("%d", len(state.Blocks)))
 	// Run UI at 30fps
 	ticker := time.NewTicker(33 * time.Millisecond)
 	for {

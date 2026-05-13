@@ -252,6 +252,14 @@ done:
 	return convergenceTime
 }
 
+
+type RequestTiming struct {
+	Start time.Time
+	Type  string
+	NodeFail bool
+}
+var PendingTimings sync.Map
+
 func buildMoveMessage(playerID string, x, y int) string {
 	return fmt.Sprintf("%s|%d|%d", playerID, x, y)
 }

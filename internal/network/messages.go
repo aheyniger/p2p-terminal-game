@@ -18,10 +18,12 @@ const (
 	GRAB_RES
 	DROP_REQ
 	DROP_RES
+	PENDING_REQ
 	BLOCK_SPAWN
 	STATE_SYNC
 	TEST_GOSSIP
 	TEST_GOSSIP_ACK
+	TEST_BLOCK_TIME
 )
 
 const Delim = "~|"
@@ -76,7 +78,7 @@ func (n *Network) BroadcastJoin(playerID string, playerColor tcell.Color) {
 
 // broadcast grab requests by non owners
 // now a direct send, not technically a broadcast
-func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
+func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string, reqID string) {
 	node := n.List.LocalNode().Name
 	timestamp := time.Now().UnixNano()
 	msg := buildMsg(Delim,
@@ -86,12 +88,13 @@ func (n *Network) BroadcastGrabRequest(blockID, playerID string, owner string) {
 		blockID,
 		playerID,
 		owner,
+		reqID,
 	)
 
 	n.SendDirect(owner, msg)
 }
 
-func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, owner string) {
+func (n *Network) BroadcastGrabResult(reqID string, blockID, playerID string,success bool, owner string) {
 	result := 0
 	if success {
 		result = 1
@@ -101,6 +104,7 @@ func (n *Network) BroadcastGrabResult(blockID, playerID string, success bool, ow
 		n.LocalName,
 		time.Now().UnixNano(),
 		GRAB_RES,
+		reqID,
 		blockID,
 		playerID,
 		result,
@@ -127,16 +131,18 @@ func (n *Network) BroadcastDropRequest(blockID, playerID string, dropX, dropY in
 	n.SendDirect(owner, msg)
 }
 
-func (n *Network) BroadcastDropResult(blockID, playerID string, dropX, dropY int, success bool) {
+func (n *Network) BroadcastDropResult(reqID string, blockID, playerID string, dropX, dropY int,  success bool) {
 	result := 0
 	if success {
 		result = 1
 	}
 
-	msg := buildMsg(Delim,
+	msg := buildMsg(
+		Delim,
 		n.LocalName,
 		time.Now().UnixNano(),
 		DROP_RES,
+		reqID,
 		blockID,
 		playerID,
 		dropX,
@@ -203,3 +209,25 @@ func (n *Network) SendTestGossipAck(senderName string, msgId string) {
 		}
 	}
 }
+
+
+func (n *Network) BroadcastPendingRequest(reqID string, blockID string, reqType string, playerID string, ownerNode string, dropX int, dropY int ) {
+	msg := buildMsg(Delim,
+    n.LocalName,
+    time.Now().UnixNano(),
+    PENDING_REQ,
+    reqID,
+    reqType,
+    blockID,
+    playerID,
+    dropX,
+    dropY,
+    ownerNode,
+)
+
+	n.Queue.QueueBroadcast(&broadcast{
+		msg: []byte(msg),
+	})
+}
+
+

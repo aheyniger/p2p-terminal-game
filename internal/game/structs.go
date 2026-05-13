@@ -1,6 +1,7 @@
 package game
 
 import "github.com/gdamore/tcell/v2"
+import "time"
 
 type PlayerId = string // probably a uuid
 
@@ -33,6 +34,21 @@ type Block struct {
 }
 
 
+type PendingRequest struct {
+	RequestID string
+	Type      PendingRequestType // "grab" or "drop"
+
+	BlockID  string
+	PlayerID string
+
+	OwnerNode string
+
+	DropX int
+	DropY int
+
+	CreatedAt time.Time
+}
+
 
 /*im thinking we can have all blocks be identical so we don't have to keep track of which block a player
 picked up, we just set bool holdingBlock to true, and false when it's set down
@@ -43,8 +59,10 @@ type WorldState struct {
 	Players map[PlayerId]*Player
 	Blocks  map[string]*Block
 	Version uint64 // for lamport timestamps, keeping track of what game state is newest
-	
+	Pending map[string]*PendingRequest
 }
+
+
 
 // type MsgType string
 
