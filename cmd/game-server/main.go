@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"hash/fnv"
 
 	"sort"
 
@@ -22,6 +23,7 @@ import (
 func main() {
 	var mu sync.Mutex
 	var danceCancel chan struct{}
+	
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage:")
@@ -99,13 +101,13 @@ func main() {
 
 	gameNet.BroadcastJoin(localPlayer.Id, localPlayer.Color)
 
-	// Wait for cluster to acknowledge us before broadcasting our new blocks
+	// Wait for cluster to acknowledge before broadcasting our new blocks
 	if outgoingConn {
 		// Wait until memberlist actually registers at least 1 other node
 		for len(gameNet.List.Members()) < 2 {
 			time.Sleep(100 * time.Millisecond)
 		}
-		// Add a tiny buffer to allow remote nodes to stabilize their UDP pipelines
+		// Add a buffer to allow remote nodes to stabilize their UDP pipelines
 		time.Sleep(200 * time.Millisecond)
 	}
 	//spawn blocks
@@ -145,7 +147,7 @@ func main() {
 	// 	log.Printf("did not enter if statement\n")
 	// }
 
-	// NETWORK HOOK (incoming msgs)
+	// Network hook (incoming msgs)
 	gameNet.OnPositionUpdate = func(id string, x, y int) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -251,8 +253,74 @@ func main() {
 					if b.Pos.X == livePlayer.Pos.X && b.Pos.Y == livePlayer.Pos.Y {
 						log.Printf("DEBUG [INPUT]: Hitbox matched! Block is held by: '%s'. Requesting from owner: %s\n", b.HeldBy, b.OwnerNode)
 						if b.HeldBy == "" {
-							// don't assign it yet! ask the owner for permission.
+							
+							var should_node_fail bool = false
+
+							log.Printf(
+								"[PERF STORE] req=%s",
+								reqID,
+							)
+
+							//for measuring latency of grab requests to results
+							network.PendingTimings.Store(reqID, network.RequestTiming{
+								Start: time.Now(),
+								Type:  "grab",
+								NodeFail: should_node_fail,
+							})
+
+							state.Pending[reqID] = &game.PendingRequest{
+								RequestID: reqID,
+								Type:      game.PendingGrab,
+								BlockID:   b.ID,
+								PlayerID:  livePlayer.Id,
+								OwnerNode: b.OwnerNode,
+								CreatedAt: time.Now(),
+							}
+							gameNet.BroadcastPendingRequest(reqID, b.ID, string(game.PendingGrab), livePlayer.Id, b.OwnerNode, 0, 0)
+
 							gameNet.BroadcastGrabRequest(b.ID, livePlayer.Id, b.OwnerNode, reqID)
+
+
+							go func(targetBlockID, reqID, reqPlayerID string) {
+							for i := 1; i <= 20; i++ {
+								time.Sleep(1 * time.Second)
+								
+								 
+								mu.Lock()
+								p, pExists := state.Players[reqPlayerID]
+								updatedBlock, bExists := state.Blocks[targetBlockID]
+								
+								// did we successfully grab it
+								if pExists && p.HeldBlock != nil && p.HeldBlock.ID == targetBlockID {
+									mu.Unlock()
+									return // Success, exit the retry loop.
+								}
+								
+								// is the block still available?
+								if bExists && updatedBlock.HeldBy == "" {
+									log.Printf("DEBUG [RETRY %d/10]: Grab %s pending. Current owner is: %s\n", i, reqID, updatedBlock.OwnerNode)
+									
+									// Broadcast again to whoever the current owner is
+									gameNet.BroadcastGrabRequest(updatedBlock.ID, reqPlayerID, updatedBlock.OwnerNode, reqID)
+								} else if bExists && updatedBlock.HeldBy != "" && updatedBlock.HeldBy != reqPlayerID {
+									// someone else grabbed it while we were retrying
+									log.Printf("DEBUG [RETRY %d/10]: Block was taken by another player. Aborting retry.", i)
+									mu.Unlock()
+									return
+								}
+								mu.Unlock()
+							}
+							
+							// If we get here, 10 seconds passed and we failed. Clean up.
+							log.Printf("[PERF ERR] Grab request %s timed out permanently after 10s.\n", reqID)
+							network.PendingTimings.Delete(reqID)
+							
+							// Also clean up pending map so it doesn't leak memory
+							mu.Lock()
+							delete(state.Pending, reqID)
+							mu.Unlock()
+                    
+               				}(b.ID, reqID, livePlayer.Id)
 						}
 						break
 					}
@@ -309,19 +377,15 @@ func main() {
 			wv.SetLogLine(line)
 
 		case event := <-leaveEventCh:
-			// var shouldReplay bool
 			mu.Lock()
 
-		
-			// 1. remove the player
+			// remove the player
 			delete(state.Players, event.PlayerID)
 
-			// 2. figure out who takes over the blocks
-			newOwner := getNextOwner(gameNet, event.NodeName)
+			// figure out who takes over the blocks
+			newOwner := getNextOwner(gameNet, event.NodeName)			
 
-			
-
-			// 3. reassign orphaned blocks
+			// reassign orphaned blocks
 			for _, b := range state.Blocks {
 				if b.OwnerNode == event.NodeName {
 					b.OwnerNode = newOwner
@@ -352,35 +416,9 @@ func main() {
 				)
 			}
 
-			
-
-			
-
-			// if newOwner == gameNet.LocalName {
-			// 	shouldReplay = true
-				// for _, req := range state.Pending {
-				// 	if req.OwnerNode != gameNet.LocalName {
-				// 		continue
-				// 	}
-
-				// 	switch req.Type {
-
-				// 	case game.PendingGrab:
-				// 		replayGrab(state, gameNet, req)
-
-				// 	case game.PendingDrop:
-				// 		replayDrop(state, gameNet, req)
-				// 	}
-				// }
-			// }
-
 			mu.Unlock()
 
-			// if shouldReplay{
-			// 	replayPendingRequests(state, gameNet)
-			// }
-
-			if newOwner == gameNet.LocalName { //todo: check if this is necessary
+			if newOwner == gameNet.LocalName { 
 				replayPendingRequests(state, gameNet)
 			}
 		}
@@ -390,6 +428,7 @@ func main() {
 }
 
 func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg string) {
+
 	parts := strings.Split(msg, network.Delim)
 	// if len(parts) != 4 {
 	// 	log.Println("Malformed message:", logLine)
@@ -435,13 +474,13 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		gameNet.OnPositionUpdate(pId, x, y)
 
 	case network.PENDING_REQ:
-		reqID := parts[1]
-		reqType := parts[2]
-		blockID := parts[3]
-		playerID := parts[4]
-		dropX := MustAtoi(parts[5])
-		dropY := MustAtoi(parts[6])
-		ownerNode := parts[7]
+		reqID := parts[3]
+		reqType := parts[4]
+		blockID := parts[5]
+		playerID := parts[6]
+		dropX := MustAtoi(parts[7])
+		dropY := MustAtoi(parts[8])
+		ownerNode := parts[9]
 
 		gameState.Pending[reqID] = &game.PendingRequest{
 			RequestID: reqID,
@@ -462,19 +501,6 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 
 		log.Printf("DEBUG [GRAB_REQ]: Received req for block %s by player %s. Target Owner: %s, My Name: %s\n", blockID, playerID, owner, gameNet.LocalName)
 
-		//all nodes store pending request so if owner leaves, new owner already has it
-		//todo: need to clear the pending requests map for all other nodes as well so they don't store requests forever
-		req := &game.PendingRequest{
-			RequestID: reqID,
-			Type:      game.PendingGrab,
-			BlockID:   blockID,
-			PlayerID:  playerID,
-			OwnerNode: owner,
-			CreatedAt: time.Now(),
-		}
-		gameNet.BroadcastPendingRequest(req.RequestID, req.BlockID, string(req.Type), req.PlayerID, req.OwnerNode, 0, 0)
-		gameState.Pending[req.RequestID] = req
-
 		// Only owner processes
 		if owner != gameNet.LocalName {
 			return
@@ -485,6 +511,12 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		if b == nil {
 			log.Printf("DEBUG [GRAB_REQ]: Block %s not found in my state!\n", blockID)
 			return
+		}
+
+		var should_node_fail bool = false
+		//for performance metrics - if nodefail, this node crashes. new owner should pick up
+		if should_node_fail {
+			os.Exit(1)
 		}
 
 		success := false
@@ -502,7 +534,7 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		}
 
 		// broadcast result
-		gameNet.BroadcastGrabResult(req.RequestID, blockID, playerID, success, b.OwnerNode)
+		gameNet.BroadcastGrabResult(reqID, blockID, playerID, success, b.OwnerNode)
 		
 
 	case network.GRAB_RES:
@@ -515,14 +547,39 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 
 		log.Printf("DEBUG [GRAB_RES]: Parsed - Block: %s, Player: %s, Success: %v\n", blockID, playerID, success)
 
+		log.Printf(
+			"[PERF LOAD] req=%s",
+			reqID,
+		)
+
+		//end time, result received 
+		if val, ok := network.PendingTimings.Load(reqID); ok {
+			rt := val.(network.RequestTiming)
+
+			latency := time.Since(rt.Start)
+
+			nodefail := rt.NodeFail
+
+			log.Printf(
+				"[PERF] failed: %t. grab request %s completed in %v",
+				nodefail,
+				reqID,
+				latency,
+			)
+
+			network.PendingTimings.Delete(reqID)
+		} 
+		
 		if !success {
 			log.Println("DEBUG [GRAB_RES]: Success was false, returning early.")
+			delete(gameState.Pending, reqID)
 			return
 		}
 
 		b, exists := gameState.Blocks[blockID]
 		if !exists {
 			log.Printf("DEBUG [GRAB_RES]: Block %s not found in gameState!\n", blockID)
+			delete(gameState.Pending, reqID)
 			return
 		}
 
@@ -620,22 +677,24 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		success := parts[8] == "1"
 
 		if !success {
+			delete(gameState.Pending, reqID)
 			return
 		}
 
 		b, bExists := gameState.Blocks[blockID]
 		if !bExists {
+			delete(gameState.Pending, reqID)
 			return
 		}
 
-		// 1. Unassign the block and update its physical coordinates
+		// Unassign the block and update its coordinates
 		b.HeldBy = ""
 		b.Pos.X = dropX
 		b.Pos.Y = dropY
 
-		// 2. Clear the block from the player, making them shrink back to 1x1
+		// Clear the block from the player, making them shrink back to 1x1
 		if p, pExists := gameState.Players[playerID]; pExists {
-			// Double check they are holding THIS block to prevent race conditions
+			//double check player holding this block to prevent race conditions
 			if p.HeldBlock != nil && p.HeldBlock.ID == blockID {
 				p.HeldBlock = nil
 			}
@@ -684,7 +743,13 @@ func OnMsgReceived(gameNet *network.Network, gameState *game.WorldState, msg str
 		if ch, ok := gameNet.PendingAcks.Load(parts[3]); ok {
 			ch.(chan network.NodeTime) <- network.NodeTime{AckTime: time.Now(), NodeName: node}
 		}
+
+	case network.TEST_BLOCK_TIME:
+
 	}
+
+
+
 
 }
 
@@ -704,9 +769,16 @@ func getNextOwner(gameNet *network.Network, leavingNode string) string {
 		return gameNet.LocalName
 	}
 
-	// alphabetically sort the remaining nodes to ensure deterministic selection
+	// sort nodes
 	sort.Strings(activeNodes)
-	return activeNodes[0]
+
+	//hash the id of the node leaving so new owner is spread out among all the nodes, no one node gets ownership of all orphaned blocks
+	h := fnv.New32a()
+	h.Write([]byte(leavingNode))
+
+	idx := int(h.Sum32()) % len(activeNodes)
+
+	return activeNodes[idx]
 }
 
 func replayPendingRequests(
@@ -740,6 +812,7 @@ func replayPendingRequests(
 }
 
 func replayGrab(gameState *game.WorldState, gameNet *network.Network, req *game.PendingRequest) {
+	
 	b, exists := gameState.Blocks[req.BlockID]
 	if !exists {
 		return
@@ -805,6 +878,8 @@ func replayDrop(gameState *game.WorldState, gameNet *network.Network, req *game.
 		req.DropY,
 		success,
 	)
+
+	delete(gameState.Pending, req.RequestID)
 }
 
 func connectToLobby(outgoing bool, logCh chan string) *network.Network {
@@ -823,7 +898,7 @@ func connectToLobby(outgoing bool, logCh chan string) *network.Network {
 		log.Fatalf("Error starting game network: %v", err)
 	}
 
-	// If join address provided → join cluster
+	// If join address provided join cluster
 	if outgoing {
 		joinAddr := os.Args[2]
 		n, err := gameNet.List.Join([]string{joinAddr})

@@ -23,6 +23,7 @@ const (
 	STATE_SYNC
 	TEST_GOSSIP
 	TEST_GOSSIP_ACK
+	TEST_BLOCK_TIME
 )
 
 const Delim = "~|"
@@ -212,17 +213,21 @@ func (n *Network) SendTestGossipAck(senderName string, msgId string) {
 
 func (n *Network) BroadcastPendingRequest(reqID string, blockID string, reqType string, playerID string, ownerNode string, dropX int, dropY int ) {
 	msg := buildMsg(Delim,
-		PENDING_REQ,
-		reqID,
-		reqType,
-		blockID,
-		playerID,
-		dropX,
-		dropY,
-		ownerNode,
-	)
+    n.LocalName,
+    time.Now().UnixNano(),
+    PENDING_REQ,
+    reqID,
+    reqType,
+    blockID,
+    playerID,
+    dropX,
+    dropY,
+    ownerNode,
+)
 
 	n.Queue.QueueBroadcast(&broadcast{
 		msg: []byte(msg),
 	})
 }
+
+
